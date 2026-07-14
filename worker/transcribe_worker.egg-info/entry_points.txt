@@ -1,0 +1,2 @@
+[console_scripts]
+transcribe-worker = worker.main:run

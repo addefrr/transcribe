@@ -1,0 +1,81 @@
+import {
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
+
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  creditBalance: integer("credit_balance").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// id is the sha256 of the cookie token, so a leaked DB dump can't be replayed.
+export const sessions = pgTable("sessions", {
+  id: text("id").primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Append-only audit trail; users.credit_balance is updated in the same
+// transaction as every insert here, so SUM(delta) always equals the balance.
+export const creditLedger = pgTable("credit_ledger", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  delta: integer("delta").notNull(),
+  reason: text("reason").notNull(), // signup_bonus | purchase | hold | refund
+  jobId: uuid("job_id"),
+  stripeEventId: text("stripe_event_id").unique(), // idempotency key for webhooks
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const jobs = pgTable("jobs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  sourceType: text("source_type").notNull(), // upload | url
+  sourceUrl: text("source_url"),
+  uploadKey: text("upload_key"),
+  originalFilename: text("original_filename"),
+  tier: text("tier").notNull(),
+  creditsPerMinute: integer("credits_per_minute").notNull(),
+  // pending -> probing -> downloading -> transcribing -> completed | failed
+  status: text("status").notNull().default("pending"),
+  durationSeconds: doublePrecision("duration_seconds"),
+  creditsHeld: integer("credits_held").notNull().default(0),
+  creditsCharged: integer("credits_charged").notNull().default(0),
+  language: text("language"),
+  error: text("error"),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("jobs_status_created_idx").on(t.status, t.createdAt), // worker queue poll
+  index("jobs_user_created_idx").on(t.userId, t.createdAt),
+]);
+
+export const transcripts = pgTable("transcripts", {
+  jobId: uuid("job_id")
+    .primaryKey()
+    .references(() => jobs.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  segments: jsonb("segments").notNull().$type<TranscriptSegment[]>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type TranscriptSegment = { start: number; end: number; text: string };
+export type User = typeof users.$inferSelect;
+export type Job = typeof jobs.$inferSelect;

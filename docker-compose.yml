@@ -1,0 +1,69 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: transcribe
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Optional S3-compatible storage for STORAGE_DRIVER=s3:  docker compose --profile s3 up -d
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio12345
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    profiles: ["s3"]
+
+  minio-init:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 minio minio12345; do sleep 1; done;
+      mc mb --ignore-existing local/transcribe;
+      exit 0"
+    profiles: ["s3"]
+
+  # Optional containerized worker:  docker compose --profile worker up -d --build
+  worker:
+    build: ./worker
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/transcribe
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      UPLOAD_DIR: /data/uploads
+      TRANSCRIBE_BACKEND: ${TRANSCRIBE_BACKEND:-local}
+      WHISPER_MODEL_STANDARD: ${WHISPER_MODEL_STANDARD:-small}
+      WHISPER_MODEL_PREMIUM: ${WHISPER_MODEL_PREMIUM:-large-v3}
+      RUNPOD_API_KEY: ${RUNPOD_API_KEY:-}
+      RUNPOD_ENDPOINT_ID: ${RUNPOD_ENDPOINT_ID:-}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-transcribe}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-minio}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-minio12345}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-1}
+    volumes:
+      - ./data/uploads:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["worker"]
+
+volumes:
+  pgdata:
+  miniodata:
