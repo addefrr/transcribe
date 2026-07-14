@@ -56,7 +56,13 @@ export default function NewJobForm() {
         });
         if (!prep.ok) throw new Error((await prep.json()).error ?? "Upload failed");
         const { key, uploadUrl } = await prep.json();
-        const put = await fetch(uploadUrl, { method: "PUT", body: file });
+        // Explicit header: presigned S3 PUTs sign the content-type from the
+        // prepare call, and fetch omits the header when file.type is "".
+        const put = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "content-type": file.type || "application/octet-stream" },
+          body: file,
+        });
         if (!put.ok) throw new Error("Upload failed — try again.");
         body = {
           sourceType: "upload",

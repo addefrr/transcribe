@@ -16,6 +16,7 @@ from ..errors import JobError
 log = logging.getLogger(__name__)
 
 _POLL_SECONDS = 3
+_MAX_POLL_FAILURES = 10
 
 
 def _headers() -> dict:
@@ -30,8 +31,13 @@ def transcribe(audio_path: str, model_name: str, job: dict, language: Optional[s
 
     key = f"audio/{job['id']}.ogg"
     storage.put_file(audio_path, key)
-    audio_url = storage.presign_get(key)
+    try:
+        return _run_and_poll(storage.presign_get(key), model_name, job, language)
+    finally:
+        storage.delete_key(key)
 
+
+def _run_and_poll(audio_url: str, model_name: str, job: dict, language: Optional[str]) -> dict:
     base = f"https://api.runpod.ai/v2/{config.RUNPOD_ENDPOINT_ID}"
     resp = requests.post(
         f"{base}/run",
@@ -45,9 +51,21 @@ def transcribe(audio_path: str, model_name: str, job: dict, language: Optional[s
     log.info("runpod run %s started for job %s", run_id, job["id"])
 
     deadline = time.monotonic() + config.RUNPOD_TIMEOUT_SECONDS
+    poll_failures = 0
     while time.monotonic() < deadline:
         time.sleep(_POLL_SECONDS)
-        status = requests.get(f"{base}/status/{run_id}", headers=_headers(), timeout=30).json()
+        # A blip in RunPod's status API must not fail a run that's still
+        # executing (and already costing GPU time) — retry within the deadline.
+        try:
+            resp = requests.get(f"{base}/status/{run_id}", headers=_headers(), timeout=30)
+            resp.raise_for_status()
+            status = resp.json()
+        except (requests.RequestException, ValueError) as exc:
+            poll_failures += 1
+            if poll_failures >= _MAX_POLL_FAILURES:
+                raise JobError("Lost contact with the GPU endpoint.") from exc
+            continue
+        poll_failures = 0
         state = status.get("status")
         if state == "COMPLETED":
             output = status.get("output") or {}
@@ -56,5 +74,8 @@ def transcribe(audio_path: str, model_name: str, job: dict, language: Optional[s
             return {"language": output.get("language"), "segments": output["segments"]}
         if state in ("FAILED", "CANCELLED", "TIMED_OUT"):
             raise JobError(f"GPU transcription {state.lower()}: {status.get('error', '')}"[:500])
-    requests.post(f"{base}/cancel/{run_id}", headers=_headers(), timeout=30)
+    try:
+        requests.post(f"{base}/cancel/{run_id}", headers=_headers(), timeout=30)
+    except requests.RequestException:
+        log.warning("could not cancel runpod run %s", run_id)
     raise JobError("GPU transcription timed out.")

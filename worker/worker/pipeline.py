@@ -1,6 +1,7 @@
 import logging
 import shutil
 import tempfile
+import threading
 from typing import Any
 
 import psycopg
@@ -10,19 +11,67 @@ from .errors import JobError
 
 log = logging.getLogger(__name__)
 
+_HEARTBEAT_SECONDS = 60
+
+
+class _Heartbeat:
+    """Refresh claimed_at while a job runs so requeue_stale doesn't hand a
+    still-in-progress job to another worker. Uses its own connection — the
+    main connection is busy and psycopg connections aren't thread-safe."""
+
+    def __init__(self, job_id: str):
+        self._job_id = job_id
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def __enter__(self) -> "_Heartbeat":
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self._stop.set()
+        self._thread.join(timeout=5)
+
+    def _run(self) -> None:
+        try:
+            conn = psycopg.connect(config.DATABASE_URL, autocommit=True)
+        except Exception:
+            log.warning("heartbeat for job %s could not connect", self._job_id)
+            return
+        try:
+            while not self._stop.wait(_HEARTBEAT_SECONDS):
+                conn.execute(
+                    "UPDATE jobs SET claimed_at = now() WHERE id = %s", (self._job_id,)
+                )
+        except Exception:
+            log.warning("heartbeat for job %s stopped", self._job_id, exc_info=True)
+        finally:
+            conn.close()
+
 
 def process_job(conn: psycopg.Connection, job: dict[str, Any]) -> None:
     workdir = tempfile.mkdtemp(prefix=f"job-{job['id']}-")
     try:
-        _run(conn, job, workdir)
+        with _Heartbeat(job["id"]):
+            _run(conn, job, workdir)
+        _cleanup_source(job)
     except JobError as exc:
         log.warning("job %s failed: %s", job["id"], exc)
         db.fail_job(conn, job, str(exc))
+        _cleanup_source(job)
     except Exception:
         log.exception("job %s crashed", job["id"])
         db.fail_job(conn, job, "Internal error while processing this job.")
+        _cleanup_source(job)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _cleanup_source(job: dict[str, Any]) -> None:
+    """Delete the uploaded source once the job is terminal. Deliberately not
+    reached when fail_job itself raised — a requeued job still needs the file."""
+    if job["source_type"] == "upload" and job["upload_key"]:
+        storage.delete_key(job["upload_key"])
 
 
 def _check_duration(duration: float) -> None:

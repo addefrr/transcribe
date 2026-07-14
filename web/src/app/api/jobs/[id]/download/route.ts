@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { jobs, transcripts } from "@/lib/schema";
 import { segmentsToSrt, segmentsToVtt } from "@/lib/subtitles";
+import { isUuid } from "@/lib/uuid";
 
 const FORMATS = {
   txt: { mime: "text/plain" },
@@ -21,13 +22,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   }
 
   const { id } = await ctx.params;
+  if (!isUuid(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const [row] = await db
     .select({ job: jobs, transcript: transcripts })
     .from(jobs)
     .innerJoin(transcripts, eq(transcripts.jobId, jobs.id))
     .where(and(eq(jobs.id, id), eq(jobs.userId, user.id)))
-    .limit(1)
-    .catch(() => []);
+    .limit(1);
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const { transcript } = row;

@@ -11,6 +11,10 @@ import { users } from "@/lib/schema";
 
 export type AuthState = { error?: string };
 
+// argon2id hash of an unused password, for constant-time-ish login failures.
+const DUMMY_PASSWORD_HASH =
+  "$argon2id$v=19$m=19456,t=2,p=1$lFk75WW82LABRvZhgtwMUA$lqtEWeA7nK5SxX8jsAz3MKXjzV3uE6SElaLWQsiMJgs";
+
 const credentialsSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address."),
   password: z.string().min(8, "Password must be at least 8 characters."),
@@ -34,8 +38,11 @@ export async function signup(_prev: AuthState, formData: FormData): Promise<Auth
       .values({ email, passwordHash })
       .returning({ id: users.id });
     userId = row.id;
-  } catch {
-    return { error: "An account with that email already exists." };
+  } catch (err) {
+    if ((err as { code?: string }).code === "23505") {
+      return { error: "An account with that email already exists." };
+    }
+    throw err; // real DB failure — don't misreport it as a duplicate email
   }
 
   if (SIGNUP_BONUS_CREDITS > 0) {
@@ -56,7 +63,10 @@ export async function login(_prev: AuthState, formData: FormData): Promise<AuthS
   const { email, password } = parsed.data;
 
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-  if (!user || !(await verifyPassword(user.passwordHash, password))) {
+  // Verify against a dummy hash when the email is unknown so response time
+  // doesn't reveal which accounts exist.
+  const ok = await verifyPassword(user?.passwordHash ?? DUMMY_PASSWORD_HASH, password);
+  if (!user || !ok) {
     return { error: "Invalid email or password." };
   }
   await createSession(user.id);

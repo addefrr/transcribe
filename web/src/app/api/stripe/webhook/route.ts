@@ -22,15 +22,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  if (event.type === "checkout.session.completed") {
+  // Delayed payment methods fire `completed` with payment_status "unpaid" and
+  // `async_payment_succeeded` once the money actually arrives — only ever
+  // grant credits for a session that is paid.
+  if (
+    event.type === "checkout.session.completed" ||
+    event.type === "checkout.session.async_payment_succeeded"
+  ) {
     const session = event.data.object;
     const userId = session.metadata?.userId;
     const credits = Number(session.metadata?.credits);
-    if (!userId || !Number.isInteger(credits) || credits <= 0) {
-      // Not one of our sessions (or corrupted metadata) — acknowledge and move on.
+    if (
+      session.payment_status !== "paid" ||
+      !userId ||
+      !Number.isInteger(credits) ||
+      credits <= 0
+    ) {
+      // Unpaid yet, not one of our sessions, or corrupted metadata — ack and move on.
       return NextResponse.json({ received: true });
     }
     // Idempotent by event id: Stripe retries deliveries, credits apply once.
+    // (A paid `completed` and a later `async_payment_succeeded` never both
+    // fire for one session, so the two event types can't double-credit.)
     await grantCredits(userId, credits, "purchase", { stripeEventId: event.id });
   }
 

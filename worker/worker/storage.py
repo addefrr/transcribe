@@ -1,8 +1,11 @@
+import logging
 import os
 import shutil
 
 from . import config
 from .errors import JobError
+
+log = logging.getLogger(__name__)
 
 _s3_client = None
 
@@ -60,3 +63,16 @@ def presign_get(key: str, expires: int = 6 * 3600) -> str:
         Params={"Bucket": config.S3_BUCKET, "Key": key},
         ExpiresIn=expires,
     )
+
+
+def delete_key(key: str) -> None:
+    """Best-effort delete of a stored object; never raises."""
+    try:
+        if config.STORAGE_DRIVER == "local":
+            os.remove(_safe_local_path(key))
+        else:
+            _s3().delete_object(Bucket=config.S3_BUCKET, Key=key)
+    except FileNotFoundError:
+        pass
+    except Exception:
+        log.warning("could not delete stored object %r", key, exc_info=True)

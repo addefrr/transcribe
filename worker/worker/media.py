@@ -12,6 +12,7 @@ def _ydl_opts(extra: dict) -> dict:
     return {
         "quiet": True,
         "no_warnings": True,
+        "noprogress": True,
         "noplaylist": True,
         "socket_timeout": 30,
         **extra,
@@ -36,6 +37,15 @@ def probe_url(url: str) -> Optional[float]:
     return float(duration) if duration else None
 
 
+def _size_cap_hook(progress: dict) -> None:
+    # yt-dlp's max_filesize only applies when the server declares a size up
+    # front; this hook also aborts unbounded (chunked/streamed) downloads.
+    downloaded = progress.get("downloaded_bytes") or 0
+    total = progress.get("total_bytes") or progress.get("total_bytes_estimate") or 0
+    if max(downloaded, total) > config.MAX_FILESIZE_BYTES:
+        raise JobError("Download exceeds the maximum file size.")
+
+
 def download_url(url: str, workdir: str) -> str:
     """Download best available audio (or full media if audio-only isn't offered)."""
     import yt_dlp
@@ -45,6 +55,7 @@ def download_url(url: str, workdir: str) -> str:
             "outtmpl": os.path.join(workdir, "source.%(ext)s"),
             "format": "bestaudio/best",
             "max_filesize": config.MAX_FILESIZE_BYTES,
+            "progress_hooks": [_size_cap_hook],
         }
     )
     try:
