@@ -1,41 +1,30 @@
-// Single source of truth for what things cost.
-// 1 credit = 1 minute of Standard-tier transcription.
-//
-// The credits/minute rate is copied into each job row at submission time, so
-// changing these numbers never affects jobs already in flight. Which backend +
-// model each tier maps to is the worker's concern (STANDARD_/PREMIUM_ env vars).
+// Client-safe pricing primitives (types, tier keys, pure helpers). No DB import,
+// so this is safe to import from client components. The editable *values* (rates,
+// packs, prices) live in web/src/lib/settings.ts (server-only, DB-backed).
 
-export const TIERS = {
-  standard: {
-    label: "Standard",
-    creditsPerMinute: 1,
-    description: "Great quality at the best price. Ideal for clear recordings, interviews and videos.",
-  },
-  premium: {
-    label: "Premium",
-    creditsPerMinute: 2,
-    description:
-      "Our most accurate option. Best for noisy audio, strong accents, meetings and podcasts.",
-  },
-} as const;
+export type TierKey = "standard" | "premium";
+export type Tier = TierKey; // backwards-compatible alias
 
-export type Tier = keyof typeof TIERS;
-
-export function isTier(value: string): value is Tier {
-  return value in TIERS;
+export interface TierConfig {
+  label: string;
+  creditsPerMinute: number;
+  description: string;
 }
 
-export const PACKS = [
-  { id: "starter", name: "Starter", credits: 100, amountUsdCents: 500 },
-  { id: "creator", name: "Creator", credits: 500, amountUsdCents: 2000 },
-  { id: "studio", name: "Studio", credits: 2000, amountUsdCents: 6000 },
-] as const;
+export interface Pack {
+  id: string;
+  name: string;
+  credits: number;
+  amountUsdCents: number;
+}
 
-export type Pack = (typeof PACKS)[number];
+export const TIER_KEYS: TierKey[] = ["standard", "premium"];
 
-export const SIGNUP_BONUS_CREDITS = 10;
+export function isTier(value: string): value is TierKey {
+  return value === "standard" || value === "premium";
+}
 
-/** Same rounding as the worker: whole minutes, rounded up, minimum one. */
-export function estimateCredits(durationSeconds: number, tier: Tier): number {
-  return Math.max(1, Math.ceil(durationSeconds / 60)) * TIERS[tier].creditsPerMinute;
+/** Whole minutes, rounded up, minimum one — matches the worker's billing. */
+export function estimateCredits(durationSeconds: number, creditsPerMinute: number): number {
+  return Math.max(1, Math.ceil(durationSeconds / 60)) * creditsPerMinute;
 }

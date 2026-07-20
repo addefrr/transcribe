@@ -2,7 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { PACKS } from "@/lib/pricing";
+import { getSettings } from "@/lib/settings";
 import { creditLedger } from "@/lib/schema";
 
 export const metadata = { title: "Your credits — Transcribe" };
@@ -22,6 +22,7 @@ export default async function CreditsPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const params = await searchParams;
+  const { packs } = await getSettings();
 
   const ledger = await db
     .select()
@@ -53,7 +54,7 @@ export default async function CreditsPage({
       )}
 
       <div className="mt-8 grid gap-6 sm:grid-cols-3">
-        {PACKS.map((pack) => (
+        {packs.map((pack) => (
           <form
             key={pack.id}
             action="/api/stripe/checkout"

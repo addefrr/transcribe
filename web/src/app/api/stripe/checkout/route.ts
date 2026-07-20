@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { grantCredits } from "@/lib/credits";
-import { PACKS } from "@/lib/pricing";
+import { getSettings } from "@/lib/settings";
 import { APP_URL, getStripe } from "@/lib/stripe";
 
 // Form POST from /credits. Redirects to Stripe Checkout (or straight back to
@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.redirect(new URL("/login", APP_URL), 303);
 
   const form = await req.formData();
-  const pack = PACKS.find((p) => p.id === form.get("packId"));
+  const { packs } = await getSettings();
+  const pack = packs.find((p) => p.id === form.get("packId"));
   if (!pack) {
     return NextResponse.json({ error: "Unknown credit pack" }, { status: 400 });
   }

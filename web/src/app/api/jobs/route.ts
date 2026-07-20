@@ -4,7 +4,8 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isLanguageCode } from "@/lib/languages";
-import { isTier, TIERS } from "@/lib/pricing";
+import { isTier } from "@/lib/pricing";
+import { getSettings } from "@/lib/settings";
 import { jobs } from "@/lib/schema";
 import { isValidUploadKey } from "@/lib/storage";
 import { screenUrl } from "@/lib/ssrf";
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
   if (!isTier(body.tier)) {
     return NextResponse.json({ error: "Unknown quality tier" }, { status: 400 });
   }
+  const settings = await getSettings();
   // Empty/absent language means auto-detect; a non-empty value must be one we offer.
   const languageHint = body.language || null;
   if (languageHint && !isLanguageCode(languageHint)) {
@@ -84,7 +86,7 @@ export async function POST(req: NextRequest) {
     .values({
       userId: user.id,
       tier: body.tier,
-      creditsPerMinute: TIERS[body.tier].creditsPerMinute,
+      creditsPerMinute: settings.tiers[body.tier].creditsPerMinute,
       languageHint,
       ...values,
     })

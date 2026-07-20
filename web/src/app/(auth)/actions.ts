@@ -6,7 +6,7 @@ import { z } from "zod";
 import { createSession, destroySession, hashPassword, verifyPassword } from "@/lib/auth";
 import { grantCredits } from "@/lib/credits";
 import { db } from "@/lib/db";
-import { SIGNUP_BONUS_CREDITS } from "@/lib/pricing";
+import { getSettings } from "@/lib/settings";
 import { users } from "@/lib/schema";
 
 export type AuthState = { error?: string };
@@ -45,8 +45,9 @@ export async function signup(_prev: AuthState, formData: FormData): Promise<Auth
     throw err; // real DB failure — don't misreport it as a duplicate email
   }
 
-  if (SIGNUP_BONUS_CREDITS > 0) {
-    await grantCredits(userId, SIGNUP_BONUS_CREDITS, "signup_bonus");
+  const { signupBonusCredits } = await getSettings();
+  if (signupBonusCredits > 0) {
+    await grantCredits(userId, signupBonusCredits, "signup_bonus");
   }
   await createSession(userId);
   redirect("/dashboard");

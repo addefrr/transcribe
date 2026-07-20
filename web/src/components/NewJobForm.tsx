@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { LANGUAGES } from "@/lib/languages";
-import { estimateCredits, TIERS, type Tier } from "@/lib/pricing";
+import { estimateCredits, type Tier, type TierConfig } from "@/lib/pricing";
 
 async function getMediaDuration(file: File): Promise<number | null> {
   return new Promise((resolve) => {
@@ -21,7 +21,7 @@ async function getMediaDuration(file: File): Promise<number | null> {
   });
 }
 
-export default function NewJobForm() {
+export default function NewJobForm({ tiers }: { tiers: Record<Tier, TierConfig> }) {
   const [mode, setMode] = useState<"upload" | "url">("upload");
   const [tier, setTier] = useState<Tier>("standard");
   const [language, setLanguage] = useState(""); // "" = auto-detect
@@ -98,7 +98,9 @@ export default function NewJobForm() {
   }
 
   const estimate =
-    mode === "upload" && fileDuration ? estimateCredits(fileDuration, tier) : null;
+    mode === "upload" && fileDuration
+      ? estimateCredits(fileDuration, tiers[tier].creditsPerMinute)
+      : null;
 
   const tabClass = (active: boolean) =>
     `rounded-md px-4 py-2 text-sm font-medium ${
@@ -144,7 +146,7 @@ export default function NewJobForm() {
       </div>
 
       <fieldset className="mt-5 grid gap-3 sm:grid-cols-2">
-        {(Object.entries(TIERS) as [Tier, (typeof TIERS)[Tier]][]).map(([id, t]) => (
+        {(Object.entries(tiers) as [Tier, TierConfig][]).map(([id, t]) => (
           <label
             key={id}
             className={`cursor-pointer rounded-lg border p-4 text-sm ${

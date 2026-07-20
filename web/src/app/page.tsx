@@ -1,25 +1,25 @@
 import Link from "next/link";
-import { PACKS, SIGNUP_BONUS_CREDITS, TIERS } from "@/lib/pricing";
+import { getSettings } from "@/lib/settings";
 
-const STEPS = [
-  {
-    emoji: "✨",
-    title: "Add credits",
-    body: `Start with ${SIGNUP_BONUS_CREDITS} free credits when you sign up. Top up any time — no subscription.`,
-  },
-  {
-    emoji: "⬆️",
-    title: "Add your audio or video",
-    body: "Upload a file, or paste a link — including YouTube. We handle the rest.",
-  },
-  {
-    emoji: "📄",
-    title: "Get your transcript",
-    body: "Read it online with timestamps, or download it as a text or subtitle file.",
-  },
-];
-
-export default function Home() {
+export default async function Home() {
+  const { tiers, packs, signupBonusCredits } = await getSettings();
+  const STEPS = [
+    {
+      emoji: "✨",
+      title: "Add credits",
+      body: `Start with ${signupBonusCredits} free credits when you sign up. Top up any time — no subscription.`,
+    },
+    {
+      emoji: "⬆️",
+      title: "Add your audio or video",
+      body: "Upload a file, or paste a link — including YouTube. We handle the rest.",
+    },
+    {
+      emoji: "📄",
+      title: "Get your transcript",
+      body: "Read it online with timestamps, or download it as a text or subtitle file.",
+    },
+  ];
   return (
     <div className="py-16">
       <section className="mx-auto max-w-2xl text-center">
@@ -37,7 +37,7 @@ export default function Home() {
             href="/signup"
             className="rounded-md bg-indigo-600 px-6 py-3 font-medium text-white hover:bg-indigo-500"
           >
-            Get started — {SIGNUP_BONUS_CREDITS} free credits
+            Get started — {signupBonusCredits} free credits
           </Link>
         </div>
         <p className="mt-3 text-sm text-zinc-500">No card required to try it.</p>
@@ -61,7 +61,7 @@ export default function Home() {
       <section className="mx-auto mt-20 max-w-3xl">
         <h2 className="text-center text-xl font-semibold">Choose the quality that fits</h2>
         <div className="mt-8 grid gap-6 sm:grid-cols-2">
-          {Object.entries(TIERS).map(([id, tier]) => (
+          {Object.entries(tiers).map(([id, tier]) => (
             <div key={id} className="rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
               <h3 className="text-lg font-semibold">{tier.label}</h3>
               <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{tier.description}</p>
@@ -80,7 +80,7 @@ export default function Home() {
           One credit covers about a minute of audio. Buy what you need, whenever you need it.
         </p>
         <div className="mt-8 grid gap-6 sm:grid-cols-3">
-          {PACKS.map((pack, i) => (
+          {packs.map((pack, i) => (
             <div
               key={pack.id}
               className={`rounded-xl border p-6 ${

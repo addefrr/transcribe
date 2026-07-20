@@ -79,6 +79,19 @@ export const transcripts = pgTable("transcripts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export type TranscriptSegment = { start: number; end: number; text: string };
+// Admin-editable settings. One row per top-level settings key; value is JSON.
+// Read/merged over code defaults in web/src/lib/settings.ts.
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type TranscriptSegment = {
+  start: number;
+  end: number;
+  text: string;
+  speaker?: string;
+};
 export type User = typeof users.$inferSelect;
 export type Job = typeof jobs.$inferSelect;

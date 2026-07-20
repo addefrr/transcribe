@@ -3,12 +3,14 @@ import { redirect } from "next/navigation";
 import JobList from "@/components/JobList";
 import NewJobForm from "@/components/NewJobForm";
 import { getCurrentUser } from "@/lib/auth";
+import { getSettings } from "@/lib/settings";
 
 export const metadata = { title: "My transcriptions — Transcribe" };
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const { tiers } = await getSettings();
 
   return (
     <div className="py-10">
@@ -25,7 +27,7 @@ export default async function DashboardPage() {
           </Link>
         </p>
       </div>
-      <NewJobForm />
+      <NewJobForm tiers={tiers} />
       <JobList />
     </div>
   );
