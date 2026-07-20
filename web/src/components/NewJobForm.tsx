@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Recorder from "@/components/Recorder";
 import { LANGUAGES } from "@/lib/languages";
 import { estimateCredits, type Tier, type TierConfig } from "@/lib/pricing";
 
@@ -28,7 +29,7 @@ export default function NewJobForm({
   tiers: Record<Tier, TierConfig>;
   usdCentsPerCredit: number;
 }) {
-  const [mode, setMode] = useState<"upload" | "url">("upload");
+  const [mode, setMode] = useState<"upload" | "url" | "record">("upload");
   const [tier, setTier] = useState<Tier>("standard");
   const [diarize, setDiarize] = useState(false);
   const [language, setLanguage] = useState(""); // "" = auto-detect
@@ -39,6 +40,15 @@ export default function NewJobForm({
   const [error, setError] = useState<string | null>(null);
   const [queued, setQueued] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  function switchMode(m: "upload" | "url" | "record") {
+    setMode(m);
+    setFile(null);
+    setFileDuration(null);
+    setUrl("");
+    setError(null);
+    if (fileInput.current) fileInput.current.value = "";
+  }
 
   async function onFileChange(f: File | null) {
     setFile(f);
@@ -51,8 +61,9 @@ export default function NewJobForm({
     setQueued(false);
     try {
       let body: Record<string, unknown>;
-      if (mode === "upload") {
-        if (!file) throw new Error("Choose a file first.");
+      if (mode !== "url") {
+        if (!file)
+          throw new Error(mode === "record" ? "Record something first." : "Choose a file first.");
         setBusy("Uploading…");
         const prep = await fetch("/api/uploads", {
           method: "POST",
@@ -106,7 +117,7 @@ export default function NewJobForm({
   }
 
   const estimate =
-    mode === "upload" && fileDuration
+    mode !== "url" && fileDuration
       ? estimateCredits(fileDuration, tiers[tier].creditsPerMinute)
       : null;
 
@@ -124,12 +135,15 @@ export default function NewJobForm({
     >
       <h2 className="text-lg font-semibold">Start a transcription</h2>
 
-      <div className="mt-4 flex gap-2">
-        <button type="button" className={tabClass(mode === "upload")} onClick={() => setMode("upload")}>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" className={tabClass(mode === "upload")} onClick={() => switchMode("upload")}>
           Upload a file
         </button>
-        <button type="button" className={tabClass(mode === "url")} onClick={() => setMode("url")}>
+        <button type="button" className={tabClass(mode === "url")} onClick={() => switchMode("url")}>
           Paste a link
+        </button>
+        <button type="button" className={tabClass(mode === "record")} onClick={() => switchMode("record")}>
+          Record
         </button>
       </div>
 
@@ -146,7 +160,7 @@ export default function NewJobForm({
             onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
             className="block w-full text-sm file:mr-4 file:rounded-md file:border-0 file:bg-zinc-100 file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-zinc-200 dark:file:bg-zinc-800 dark:hover:file:bg-zinc-700"
           />
-        ) : (
+        ) : mode === "url" ? (
           <input
             key="url-input"
             type="url"
@@ -155,6 +169,8 @@ export default function NewJobForm({
             placeholder="Paste a YouTube or audio/video link…"
             className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700"
           />
+        ) : (
+          <Recorder onRecorded={onFileChange} />
         )}
       </div>
 
