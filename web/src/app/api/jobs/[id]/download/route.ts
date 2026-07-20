@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { jobs, transcripts } from "@/lib/schema";
-import { segmentsToSrt, segmentsToVtt } from "@/lib/subtitles";
+import { segmentsToSrt, segmentsToTxt, segmentsToVtt } from "@/lib/subtitles";
 import { isUuid } from "@/lib/uuid";
 
 const FORMATS = {
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { transcript } = row;
   const content =
     format === "txt"
-      ? transcript.text
+      ? segmentsToTxt(transcript.segments)
       : format === "srt"
         ? segmentsToSrt(transcript.segments)
         : segmentsToVtt(transcript.segments);

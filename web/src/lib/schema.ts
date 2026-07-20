@@ -1,4 +1,5 @@
 import {
+  boolean,
   doublePrecision,
   index,
   integer,
@@ -58,6 +59,7 @@ export const jobs = pgTable("jobs", {
   creditsPerMinute: integer("credits_per_minute").notNull(),
   billing: text("billing").notNull().default("credits"), // credits | subscription
   subscriptionId: uuid("subscription_id"),
+  diarize: boolean("diarize").notNull().default(false), // label speakers (Premium/AssemblyAI)
   // Estimated API cost: rate snapshotted at submit, actual set at completion.
   costPerMinuteCents: doublePrecision("cost_per_minute_cents").notNull().default(0),
   estCostCents: doublePrecision("est_cost_cents").notNull().default(0),

@@ -30,6 +30,7 @@ export default function NewJobForm({
 }) {
   const [mode, setMode] = useState<"upload" | "url">("upload");
   const [tier, setTier] = useState<Tier>("standard");
+  const [diarize, setDiarize] = useState(false);
   const [language, setLanguage] = useState(""); // "" = auto-detect
   const [file, setFile] = useState<File | null>(null);
   const [fileDuration, setFileDuration] = useState<number | null>(null);
@@ -49,7 +50,7 @@ export default function NewJobForm({
     setError(null);
     setQueued(false);
     try {
-      let body: Record<string, string>;
+      let body: Record<string, unknown>;
       if (mode === "upload") {
         if (!file) throw new Error("Choose a file first.");
         setBusy("Uploading…");
@@ -78,10 +79,11 @@ export default function NewJobForm({
           originalFilename: file.name,
           tier,
           language,
+          diarize,
         };
       } else {
         if (!url.trim()) throw new Error("Paste a URL first.");
-        body = { sourceType: "url", url: url.trim(), tier, language };
+        body = { sourceType: "url", url: url.trim(), tier, language, diarize };
       }
 
       setBusy("Queueing job…");
@@ -211,6 +213,22 @@ export default function NewJobForm({
         <span className="mt-1 block text-xs text-zinc-500">
           Leave this on Auto-detect and we&apos;ll figure it out. If you already know the
           language, choosing it can improve accuracy.
+        </span>
+      </label>
+
+      <label className="mt-5 flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={diarize}
+          onChange={(e) => {
+            setDiarize(e.target.checked);
+            if (e.target.checked) setTier("premium"); // diarization needs Premium
+          }}
+          className="mt-0.5"
+        />
+        <span>
+          <span className="font-medium">Recognize speakers</span>{" "}
+          <span className="text-zinc-500">— label who&apos;s talking (uses Premium)</span>
         </span>
       </label>
 

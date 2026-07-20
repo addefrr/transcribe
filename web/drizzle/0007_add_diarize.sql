@@ -1,0 +1,1 @@
+ALTER TABLE "jobs" ADD COLUMN "diarize" boolean DEFAULT false NOT NULL;

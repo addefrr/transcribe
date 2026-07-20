@@ -114,14 +114,25 @@ export default function JobDetail({ id }: { id: string }) {
             ))}
           </div>
           <div className="mt-6 space-y-3 rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
-            {transcript.segments.map((seg, i) => (
-              <p key={i} className="text-sm leading-relaxed">
-                <span className="mr-3 select-none font-mono text-xs text-zinc-400">
-                  {fmt(seg.start)}
-                </span>
-                {seg.text}
-              </p>
-            ))}
+            {transcript.segments.map((seg, i) => {
+              const showSpeaker =
+                seg.speaker && seg.speaker !== transcript.segments[i - 1]?.speaker;
+              return (
+                <div key={i}>
+                  {showSpeaker && (
+                    <p className="mt-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                      {seg.speaker}
+                    </p>
+                  )}
+                  <p className="text-sm leading-relaxed">
+                    <span className="mr-3 select-none font-mono text-xs text-zinc-400">
+                      {fmt(seg.start)}
+                    </span>
+                    {seg.text}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </>
       )}

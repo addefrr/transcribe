@@ -50,6 +50,13 @@
       "when": 1784578662810,
       "tag": "0006_add_job_cost",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784579188825,
+      "tag": "0007_add_diarize",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,7 @@ const bodySchema = z.discriminatedUnion("sourceType", [
     url: z.string().min(1).max(2000),
     tier: z.string(),
     language: z.string().optional(),
+    diarize: z.boolean().optional(),
   }),
   z.object({
     sourceType: z.literal("upload"),
@@ -32,6 +33,7 @@ const bodySchema = z.discriminatedUnion("sourceType", [
     originalFilename: z.string().max(300).optional(),
     tier: z.string(),
     language: z.string().optional(),
+    diarize: z.boolean().optional(),
   }),
 ]);
 
@@ -47,6 +49,10 @@ export async function POST(req: NextRequest) {
   if (!isTier(body.tier)) {
     return NextResponse.json({ error: "Unknown quality tier" }, { status: 400 });
   }
+  // Speaker recognition is only available on the diarizing (Premium/AssemblyAI)
+  // engine, so requesting it forces the Premium tier.
+  const diarize = body.diarize === true;
+  const tier = diarize ? "premium" : body.tier;
   const settings = await getSettings();
   // Empty/absent language means auto-detect; a non-empty value must be one we offer.
   const languageHint = body.language || null;
@@ -58,7 +64,7 @@ export async function POST(req: NextRequest) {
   // subscription; otherwise it's billed to credits and needs a positive balance.
   const sub = await getActiveSubscription(user.id);
   const coveredBySub =
-    sub && subscriptionCovers(sub, body.tier) && remainingMinutes(sub) > 0;
+    sub && subscriptionCovers(sub, tier) && remainingMinutes(sub) > 0;
   const billing = coveredBySub ? "subscription" : "credits";
   if (!coveredBySub && user.creditBalance <= 0) {
     return NextResponse.json(
@@ -110,11 +116,12 @@ export async function POST(req: NextRequest) {
     .insert(jobs)
     .values({
       userId: user.id,
-      tier: body.tier,
-      creditsPerMinute: settings.tiers[body.tier].creditsPerMinute,
-      costPerMinuteCents: settings.costPerMinuteCents[body.tier],
+      tier: tier,
+      creditsPerMinute: settings.tiers[tier].creditsPerMinute,
+      costPerMinuteCents: settings.costPerMinuteCents[tier],
       billing,
       subscriptionId: coveredBySub ? sub!.id : null,
+      diarize,
       languageHint,
       ...values,
     })

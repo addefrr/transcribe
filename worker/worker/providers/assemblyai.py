@@ -36,12 +36,16 @@ def transcribe(audio_path: str, model_name: str, job: dict, language: Optional[s
         raise JobError("Could not upload audio to the transcription service.") from exc
 
     # 2. Kick off the transcript. speech_model carries the tier's model choice;
-    #    language auto-detection unless the job pinned one.
+    #    language auto-detection unless the job pinned one; speaker_labels when
+    #    the user asked to recognize speakers.
+    diarize = bool(job.get("diarize"))
     request_body: dict = {"audio_url": upload_url, "speech_model": model_name}
     if language:
         request_body["language_code"] = language
     else:
         request_body["language_detection"] = True
+    if diarize:
+        request_body["speaker_labels"] = True
     try:
         created = requests.post(f"{base}/transcript", headers=_headers(), json=request_body, timeout=30)
         created.raise_for_status()
@@ -55,11 +59,27 @@ def transcribe(audio_path: str, model_name: str, job: dict, language: Optional[s
     if status.get("status") == "error":
         raise JobError(f"Transcription failed: {status.get('error', '')}"[:500])
 
-    # 4. Sentence-level segments (ms → s); fall back to the flat text.
-    segments = _fetch_sentences(base, transcript_id)
+    # 4. Segments: speaker-labelled utterances when diarizing, else sentences.
+    if diarize:
+        segments = _utterance_segments(status.get("utterances") or [])
+    else:
+        segments = _fetch_sentences(base, transcript_id)
     if not segments and status.get("text"):
         segments = [{"start": 0.0, "end": 0.0, "text": status["text"].strip()}]
     return {"language": status.get("language_code"), "segments": segments}
+
+
+def _utterance_segments(utterances: list[dict]) -> list[dict]:
+    """AssemblyAI speaker-labelled utterances → segments carrying a speaker."""
+    return [
+        {
+            "start": round((u.get("start") or 0) / 1000, 2),
+            "end": round((u.get("end") or 0) / 1000, 2),
+            "text": (u.get("text") or "").strip(),
+            "speaker": f"Speaker {u.get('speaker')}" if u.get("speaker") else None,
+        }
+        for u in utterances
+    ]
 
 
 def _poll(base: str, transcript_id: str) -> dict:
