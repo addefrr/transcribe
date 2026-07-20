@@ -1,7 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { getAdminStats } from "@/lib/admin";
-import { isAdmin } from "@/lib/admin";
+import { getAdminStats, isAdmin } from "@/lib/admin";
 
 export const metadata = { title: "Developer portal — Transcribe" };
 export const dynamic = "force-dynamic";
@@ -45,7 +45,15 @@ export default async function DeveloperPage() {
 
   return (
     <div className="py-10">
-      <h1 className="text-2xl font-semibold">Developer portal</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Developer portal</h1>
+        <Link
+          href="/developer/settings"
+          className="rounded-md border border-zinc-300 px-4 py-1.5 text-sm font-medium hover:border-indigo-500 dark:border-zinc-700"
+        >
+          Settings
+        </Link>
+      </div>
       <p className="mt-1 text-sm text-zinc-500">
         Business overview. Profit figures are estimates based on your configured cost
         assumptions (Stripe {s.assumptions.stripeFeePct}% + {s.assumptions.stripeFeeFixedCents}¢
