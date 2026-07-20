@@ -69,6 +69,13 @@ def set_status(conn: psycopg.Connection, job_id: str, status: str) -> None:
     )
 
 
+def set_output_name(conn: psycopg.Connection, job_id: str, name: str) -> None:
+    conn.execute(
+        "UPDATE jobs SET output_name = %s, updated_at = now() WHERE id = %s",
+        (name[:300], job_id),
+    )
+
+
 def credits_for(duration_seconds: float, credits_per_minute: int) -> int:
     return max(1, math.ceil(duration_seconds / 60)) * credits_per_minute
 

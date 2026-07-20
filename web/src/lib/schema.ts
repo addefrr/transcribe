@@ -51,6 +51,9 @@ export const jobs = pgTable("jobs", {
   sourceUrl: text("source_url"),
   uploadKey: text("upload_key"),
   originalFilename: text("original_filename"),
+  // Human-friendly title: upload filename or, for URLs, the video title the
+  // worker captures. Used as the display title and download file name.
+  outputName: text("output_name"),
   tier: text("tier").notNull(),
   creditsPerMinute: integer("credits_per_minute").notNull(),
   languageHint: text("language_hint"), // ISO-639-1 code, or null for auto-detect

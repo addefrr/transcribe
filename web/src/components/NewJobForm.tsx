@@ -127,7 +127,11 @@ export default function NewJobForm({ tiers }: { tiers: Record<Tier, TierConfig> 
 
       <div className="mt-4">
         {mode === "upload" ? (
+          // Distinct keys keep React from reconciling the file input (uncontrolled)
+          // and the URL input (controlled) into one shared DOM node — reusing the
+          // node would flip it between controlled/uncontrolled and warn.
           <input
+            key="file-input"
             ref={fileInput}
             type="file"
             accept="audio/*,video/*"
@@ -136,6 +140,7 @@ export default function NewJobForm({ tiers }: { tiers: Record<Tier, TierConfig> 
           />
         ) : (
           <input
+            key="url-input"
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
@@ -180,11 +185,22 @@ export default function NewJobForm({ tiers }: { tiers: Record<Tier, TierConfig> 
           className="w-full max-w-xs rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700"
         >
           <option value="">Auto-detect (recommended)</option>
-          {LANGUAGES.map((l) => (
-            <option key={l.code} value={l.code}>
-              {l.name}
-            </option>
-          ))}
+          <optgroup label="Best supported">
+            {LANGUAGES.filter((l) => "qwen" in l).map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.name}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="All languages">
+            {[...LANGUAGES]
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.name}
+                </option>
+              ))}
+          </optgroup>
         </select>
         <span className="mt-1 block text-xs text-zinc-500">
           Leave this on Auto-detect and we&apos;ll figure it out. If you already know the

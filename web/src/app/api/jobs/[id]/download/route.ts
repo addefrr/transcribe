@@ -39,7 +39,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         ? segmentsToSrt(transcript.segments)
         : segmentsToVtt(transcript.segments);
 
-  const base = (row.job.originalFilename ?? `transcript-${id}`).replace(/\.[^.]+$/, "");
+  const base = (
+    row.job.outputName ??
+    row.job.originalFilename ??
+    `transcript-${id}`
+  ).replace(/\.[^.]+$/, "");
   return new NextResponse(content, {
     headers: {
       "content-type": `${FORMATS[format].mime}; charset=utf-8`,

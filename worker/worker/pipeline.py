@@ -95,7 +95,10 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
     src = None
     if job["source_type"] == "url":
         ssrf.check_url(job["source_url"])
-        est_duration = media.probe_url(job["source_url"])
+        est_duration, title = media.probe_url(job["source_url"])
+        # Give URL jobs a human-friendly name (video title) for display/downloads.
+        if title and not job.get("output_name"):
+            db.set_output_name(conn, job["id"], title)
     else:
         src = storage.fetch_upload(job["upload_key"], workdir)
         est_duration = media.probe_file(src)

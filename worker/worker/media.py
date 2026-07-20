@@ -19,8 +19,8 @@ def _ydl_opts(extra: dict) -> dict:
     }
 
 
-def probe_url(url: str) -> Optional[float]:
-    """Duration in seconds from URL metadata only — nothing is downloaded."""
+def probe_url(url: str) -> tuple[Optional[float], Optional[str]]:
+    """(duration_seconds, title) from URL metadata only — nothing is downloaded."""
     import yt_dlp
 
     try:
@@ -34,7 +34,8 @@ def probe_url(url: str) -> Optional[float]:
             raise JobError("URL is a playlist with no entries.")
         raise JobError("Playlists are not supported — submit a single video/audio URL.")
     duration = info.get("duration")
-    return float(duration) if duration else None
+    title = info.get("title") or None
+    return (float(duration) if duration else None, title)
 
 
 def _size_cap_hook(progress: dict) -> None:

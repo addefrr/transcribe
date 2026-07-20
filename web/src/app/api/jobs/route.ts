@@ -78,6 +78,8 @@ export async function POST(req: NextRequest) {
       sourceType: "upload" as const,
       uploadKey: body.uploadKey,
       originalFilename: body.originalFilename,
+      // Display/download name from the upload; worker fills this for URL jobs.
+      outputName: body.originalFilename ?? null,
     };
   }
 

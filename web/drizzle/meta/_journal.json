@@ -29,6 +29,13 @@
       "when": 1784575056544,
       "tag": "0003_add_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784575728867,
+      "tag": "0004_add_output_name",
+      "breakpoints": true
     }
   ]
 }

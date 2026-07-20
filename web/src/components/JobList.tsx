@@ -53,8 +53,12 @@ export default function JobList() {
         <tbody>
           {jobs.map((job) => (
             <tr key={job.id} className="border-b border-zinc-100 dark:border-zinc-900">
-              <td className="max-w-60 truncate py-2.5 pr-4" title={job.sourceUrl ?? job.originalFilename ?? ""}>
-                {job.sourceType === "url" ? job.sourceUrl : (job.originalFilename ?? "upload")}
+              <td
+                className="max-w-60 truncate py-2.5 pr-4"
+                title={job.outputName ?? job.sourceUrl ?? job.originalFilename ?? ""}
+              >
+                {job.outputName ??
+                  (job.sourceType === "url" ? job.sourceUrl : (job.originalFilename ?? "upload"))}
               </td>
               <td className="py-2.5 pr-4 capitalize">{job.tier}</td>
               <td className="py-2.5 pr-4">

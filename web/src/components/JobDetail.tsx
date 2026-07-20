@@ -54,7 +54,8 @@ export default function JobDetail({ id }: { id: string }) {
 
   const { job, transcript } = data;
   const source =
-    job.sourceType === "url" ? job.sourceUrl : (job.originalFilename ?? "uploaded file");
+    job.outputName ??
+    (job.sourceType === "url" ? job.sourceUrl : (job.originalFilename ?? "uploaded file"));
 
   return (
     <div>
