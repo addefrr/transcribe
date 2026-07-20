@@ -58,6 +58,9 @@ export const jobs = pgTable("jobs", {
   creditsPerMinute: integer("credits_per_minute").notNull(),
   billing: text("billing").notNull().default("credits"), // credits | subscription
   subscriptionId: uuid("subscription_id"),
+  // Estimated API cost: rate snapshotted at submit, actual set at completion.
+  costPerMinuteCents: doublePrecision("cost_per_minute_cents").notNull().default(0),
+  estCostCents: doublePrecision("est_cost_cents").notNull().default(0),
   languageHint: text("language_hint"), // ISO-639-1 code, or null for auto-detect
 
   // pending -> probing -> downloading -> transcribing -> completed | failed

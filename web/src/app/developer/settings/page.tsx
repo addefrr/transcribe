@@ -218,6 +218,28 @@ export default async function SettingsPage({
           </div>
         </section>
 
+        {/* Spend wallet */}
+        <section>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+            Spend wallet
+          </h2>
+          <div className="mt-3 max-w-xs">
+            <label className={labelCls}>Max spend (% of revenue)</label>
+            <input
+              name="walletSpendPct"
+              type="number"
+              min={1}
+              max={100}
+              defaultValue={s.walletSpendPct}
+              className={field}
+            />
+            <p className="mt-1 text-xs text-zinc-400">
+              New transcriptions are paused once estimated API spend reaches this share of your
+              total revenue.
+            </p>
+          </div>
+        </section>
+
         <button
           type="submit"
           className="rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-indigo-500"

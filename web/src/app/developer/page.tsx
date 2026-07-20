@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getAdminStats, isAdmin } from "@/lib/admin";
+import { getWallet } from "@/lib/wallet";
 
 export const metadata = { title: "Developer portal — Transcribe" };
 export const dynamic = "force-dynamic";
@@ -42,6 +43,7 @@ export default async function DeveloperPage() {
   const user = await getCurrentUser();
   if (!isAdmin(user)) redirect("/dashboard");
   const s = await getAdminStats();
+  const wallet = await getWallet();
 
   return (
     <div className="py-10">
@@ -78,6 +80,25 @@ export default async function DeveloperPage() {
           accent="red"
         />
         <Stat label="Compute cost (est.)" value={usd(s.computeCostCents)} accent="red" />
+      </div>
+
+      {/* Spend wallet */}
+      <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-zinc-500">
+        Spend wallet
+      </h2>
+      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat label="Revenue in wallet" value={usd(wallet.revenueCents)} />
+        <Stat
+          label={`Spend budget (${wallet.spendPct}%)`}
+          value={usd(wallet.budgetCents)}
+        />
+        <Stat label="Spent on transcription" value={usd(wallet.spentCents)} accent="red" />
+        <Stat
+          label={wallet.overBudget ? "Over budget — paused" : "Budget remaining"}
+          value={usd(wallet.remainingCents)}
+          accent={wallet.overBudget ? "red" : "green"}
+          sub={wallet.overBudget ? "new jobs paused until revenue grows" : undefined}
+        />
       </div>
 
       {/* Per-credit economics */}

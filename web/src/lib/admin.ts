@@ -30,7 +30,7 @@ export async function getAdminStats() {
       (SELECT count(*) FROM users) AS total_users,
       (SELECT coalesce(sum(credit_balance), 0) FROM users) AS credits_outstanding,
       (SELECT count(DISTINCT user_id) FROM credit_ledger WHERE reason = 'purchase') AS paying_users,
-      (SELECT coalesce(sum(amount_usd_cents), 0) FROM credit_ledger WHERE reason = 'purchase') AS revenue_cents,
+      (SELECT coalesce(sum(amount_usd_cents), 0) FROM credit_ledger WHERE reason IN ('purchase', 'subscription')) AS revenue_cents,
       (SELECT count(*) FROM credit_ledger WHERE reason = 'purchase') AS purchase_count,
       (SELECT coalesce(sum(delta), 0) FROM credit_ledger WHERE reason = 'purchase') AS credits_sold,
       (SELECT coalesce(sum(delta), 0) FROM credit_ledger WHERE reason = 'signup_bonus') AS bonus_credits,

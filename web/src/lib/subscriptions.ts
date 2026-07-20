@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { grantCredits } from "./credits";
 import { db } from "./db";
 import type { TierKey } from "./pricing";
 import { subscriptions, type Subscription } from "./schema";
@@ -53,6 +54,11 @@ export async function activateSubscription(
         stripeSubscriptionId: stripeSubscriptionId ?? null,
       })
       .returning();
+    return created;
+  }).then(async (created) => {
+    // Record the payment as revenue (delta 0 — no credits, just money in), so
+    // it counts toward the spend wallet and the developer portal.
+    await grantCredits(userId, 0, "subscription", { amountUsdCents: plan.priceUsdCents });
     return created;
   });
 }

@@ -30,6 +30,8 @@ export interface Settings {
   costPerMinuteCents: Record<TierKey, number>;
   subscriptionsEnabled: boolean;
   subscriptionPlans: SubscriptionPlan[];
+  /** Max % of net revenue we allow spending on transcription APIs. */
+  walletSpendPct: number;
 }
 
 /** Fair-use minute allowance for a plan's period: price × cap% ÷ cost/minute. */
@@ -75,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: "premium_annual", tier: "premium", label: "Premium Annual", interval: "year", priceUsdCents: 7200, capPct: 50 },
     { id: "premium_week", tier: "premium", label: "Premium Week Pass", interval: "week", priceUsdCents: 600, capPct: 50 },
   ],
+  walletSpendPct: 80,
 };
 
 // Short-TTL cache so hot paths (job submit, every page render) don't hit the DB

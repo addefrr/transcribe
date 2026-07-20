@@ -80,6 +80,12 @@ def credits_for(duration_seconds: float, credits_per_minute: int) -> int:
     return max(1, math.ceil(duration_seconds / 60)) * credits_per_minute
 
 
+def est_cost_cents(duration_seconds: float, job: dict[str, Any]) -> float:
+    """Estimated transcription API cost, for the platform spend wallet."""
+    minutes = max(1, math.ceil(duration_seconds / 60))
+    return minutes * float(job.get("cost_per_minute_cents") or 0)
+
+
 def place_hold(conn: psycopg.Connection, job: dict[str, Any], duration_seconds: float) -> int:
     """Reserve credits for the probed duration. Idempotent per job."""
     credits = credits_for(duration_seconds, job["credits_per_minute"])
@@ -153,10 +159,10 @@ def complete_job(
         conn.execute(
             """
             UPDATE jobs SET status = 'completed', credits_charged = %s, duration_seconds = %s,
-                            language = %s, error = NULL, updated_at = now()
+                            language = %s, est_cost_cents = %s, error = NULL, updated_at = now()
             WHERE id = %s
             """,
-            (charge, actual_duration, language, job["id"]),
+            (charge, actual_duration, language, est_cost_cents(actual_duration, job), job["id"]),
         )
 
 
@@ -194,10 +200,10 @@ def complete_job_subscription(
         conn.execute(
             """
             UPDATE jobs SET status = 'completed', credits_charged = 0, duration_seconds = %s,
-                            language = %s, error = NULL, updated_at = now()
+                            language = %s, est_cost_cents = %s, error = NULL, updated_at = now()
             WHERE id = %s
             """,
-            (actual_duration, language, job["id"]),
+            (actual_duration, language, est_cost_cents(actual_duration, job), job["id"]),
         )
 
 

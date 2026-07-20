@@ -14,6 +14,7 @@ import {
   remainingMinutes,
   subscriptionCovers,
 } from "@/lib/subscriptions";
+import { getWallet } from "@/lib/wallet";
 
 const MAX_ACTIVE_JOBS = Number(process.env.MAX_ACTIVE_JOBS_PER_USER ?? 3);
 const ACTIVE = ["pending", "probing", "downloading", "transcribing"];
@@ -66,6 +67,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Global spend circuit-breaker: don't let API spend exceed the budget
+  // (revenue × walletSpendPct). Trips when cumulative spend catches up.
+  const wallet = await getWallet();
+  if (wallet.overBudget) {
+    return NextResponse.json(
+      { error: "We're at capacity right now — please try again shortly." },
+      { status: 503 },
+    );
+  }
+
   const active = await db
     .select({ id: jobs.id })
     .from(jobs)
@@ -101,6 +112,7 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       tier: body.tier,
       creditsPerMinute: settings.tiers[body.tier].creditsPerMinute,
+      costPerMinuteCents: settings.costPerMinuteCents[body.tier],
       billing,
       subscriptionId: coveredBySub ? sub!.id : null,
       languageHint,

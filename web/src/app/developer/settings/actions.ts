@@ -79,5 +79,10 @@ export async function saveSettings(formData: FormData): Promise<void> {
   }));
   await setSetting("subscriptionPlans", plans);
 
+  await setSetting(
+    "walletSpendPct",
+    Math.min(100, Math.max(1, num(formData, "walletSpendPct", current.walletSpendPct))),
+  );
+
   redirect("/developer/settings?saved=1");
 }

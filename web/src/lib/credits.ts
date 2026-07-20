@@ -13,7 +13,7 @@ type GrantOpts = { jobId?: string; stripeEventId?: string; amountUsdCents?: numb
 export async function grantCredits(
   userId: string,
   delta: number,
-  reason: "signup_bonus" | "purchase" | "refund",
+  reason: "signup_bonus" | "purchase" | "refund" | "subscription",
   opts: GrantOpts = {},
 ): Promise<boolean> {
   return db.transaction(async (tx) => {

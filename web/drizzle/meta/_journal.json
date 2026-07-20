@@ -43,6 +43,13 @@
       "when": 1784578169974,
       "tag": "0005_add_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784578662810,
+      "tag": "0006_add_job_cost",
+      "breakpoints": true
     }
   ]
 }
