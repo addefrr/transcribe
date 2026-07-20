@@ -66,6 +66,10 @@ WHISPER_COMPUTE = os.environ.get("WHISPER_COMPUTE", "auto")
 WHISPER_MODEL_STANDARD = os.environ.get("WHISPER_MODEL_STANDARD", "small")
 WHISPER_MODEL_PREMIUM = os.environ.get("WHISPER_MODEL_PREMIUM", "large-v3")
 
+# Keep the compressed audio this many days so users can play it back next to the
+# transcript; 0 disables retention entirely.
+AUDIO_RETENTION_DAYS = int(os.environ.get("AUDIO_RETENTION_DAYS", "7"))
+
 MAX_DURATION_SECONDS = int(os.environ.get("MAX_DURATION_SECONDS", str(4 * 3600)))
 MAX_FILESIZE_BYTES = int(os.environ.get("MAX_FILESIZE_BYTES", str(2 * 1024**3)))
 POLL_INTERVAL_SECONDS = float(os.environ.get("POLL_INTERVAL_SECONDS", "2"))

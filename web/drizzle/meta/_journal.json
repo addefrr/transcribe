@@ -57,6 +57,13 @@
       "when": 1784579188825,
       "tag": "0007_add_diarize",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784579627777,
+      "tag": "0008_add_audio_retention",
+      "breakpoints": true
     }
   ]
 }

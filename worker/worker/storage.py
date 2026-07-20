@@ -57,6 +57,16 @@ def put_file(path: str, key: str) -> None:
     _s3().upload_file(path, config.S3_BUCKET, key)
 
 
+def persist(path: str, key: str) -> None:
+    """Store a file under `key` for later retrieval (local copy or S3 upload)."""
+    if config.STORAGE_DRIVER == "local":
+        dest = _safe_local_path(key)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copyfile(path, dest)
+    else:
+        put_file(path, key)
+
+
 def presign_get(key: str, expires: int = 6 * 3600) -> str:
     return _s3().generate_presigned_url(
         "get_object",

@@ -72,6 +72,9 @@ export const jobs = pgTable("jobs", {
   creditsCharged: integer("credits_charged").notNull().default(0),
   language: text("language"),
   error: text("error"),
+  // Retained compressed audio for in-page playback (deleted after it expires).
+  audioKey: text("audio_key"),
+  audioExpiresAt: timestamp("audio_expires_at", { withTimezone: true }),
   claimedAt: timestamp("claimed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

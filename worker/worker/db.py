@@ -76,6 +76,14 @@ def set_output_name(conn: psycopg.Connection, job_id: str, name: str) -> None:
     )
 
 
+def set_audio(conn: psycopg.Connection, job_id: str, key: str, retention_days: int) -> None:
+    conn.execute(
+        "UPDATE jobs SET audio_key = %s, audio_expires_at = now() + make_interval(days => %s) "
+        "WHERE id = %s",
+        (key, retention_days, job_id),
+    )
+
+
 def credits_for(duration_seconds: float, credits_per_minute: int) -> int:
     return max(1, math.ceil(duration_seconds / 60)) * credits_per_minute
 

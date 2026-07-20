@@ -1,9 +1,9 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { Writable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 import { randomUUID } from "node:crypto";
 
 export const STORAGE_DRIVER = process.env.STORAGE_DRIVER ?? "local";
@@ -47,6 +47,38 @@ export type PreparedUpload = {
   /** local uploads PUT to our own API; s3 uploads PUT straight to the bucket */
   mode: "local" | "s3";
 };
+
+/**
+ * Fetch a stored object (e.g. retained audio) for streaming back to the client.
+ * `key` comes from the DB, never user input. Returns a web ReadableStream for
+ * the local driver, or a presigned URL to redirect to for S3.
+ */
+export async function readObject(
+  key: string,
+): Promise<{ stream: ReadableStream<Uint8Array> } | { redirect: string } | null> {
+  if (STORAGE_DRIVER === "s3") {
+    const url = await getSignedUrl(
+      getS3(),
+      new GetObjectCommand({ Bucket: process.env.S3_BUCKET ?? "transcribe", Key: key }),
+      { expiresIn: 3600 },
+    );
+    return { redirect: url };
+  }
+  // Local: resolve safely under UPLOAD_DIR and stream from disk.
+  const full = path.resolve(UPLOAD_DIR, key);
+  if (full !== UPLOAD_DIR && !full.startsWith(UPLOAD_DIR + path.sep)) return null;
+  try {
+    const node = createReadStream(full);
+    // Surface a missing file as null rather than a stream that errors later.
+    await new Promise<void>((resolve, reject) => {
+      node.once("open", () => resolve());
+      node.once("error", reject);
+    });
+    return { stream: Readable.toWeb(node) as ReadableStream<Uint8Array> };
+  } catch {
+    return null;
+  }
+}
 
 export async function prepareUpload(
   filename: string,

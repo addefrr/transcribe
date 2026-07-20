@@ -23,6 +23,7 @@ def run() -> None:
             now = time.monotonic()
             if now - last_stale_sweep > 60:
                 db.requeue_stale(conn)
+                pipeline.sweep_expired_audio(conn)
                 last_stale_sweep = now
             job = db.claim_job(conn)
             if job is None:

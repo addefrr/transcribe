@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Job, TranscriptSegment } from "@/lib/schema";
 import StatusBadge from "./StatusBadge";
 
@@ -21,6 +21,14 @@ function fmt(seconds: number): string {
 export default function JobDetail({ id }: { id: string }) {
   const [data, setData] = useState<Payload | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  function seek(seconds: number) {
+    const el = audioRef.current;
+    if (!el) return;
+    el.currentTime = seconds;
+    el.play().catch(() => {});
+  }
 
   useEffect(() => {
     let stop = false;
@@ -113,6 +121,15 @@ export default function JobDetail({ id }: { id: string }) {
               </a>
             ))}
           </div>
+          {job.audioKey && (
+            <audio
+              ref={audioRef}
+              controls
+              preload="none"
+              src={`/api/jobs/${job.id}/audio`}
+              className="mt-6 w-full"
+            />
+          )}
           <div className="mt-6 space-y-3 rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
             {transcript.segments.map((seg, i) => {
               const showSpeaker =
@@ -125,9 +142,19 @@ export default function JobDetail({ id }: { id: string }) {
                     </p>
                   )}
                   <p className="text-sm leading-relaxed">
-                    <span className="mr-3 select-none font-mono text-xs text-zinc-400">
+                    <button
+                      type="button"
+                      onClick={() => seek(seg.start)}
+                      disabled={!job.audioKey}
+                      title={job.audioKey ? "Play from here" : undefined}
+                      className={`mr-3 select-none font-mono text-xs ${
+                        job.audioKey
+                          ? "text-indigo-500 hover:underline"
+                          : "cursor-default text-zinc-400"
+                      }`}
+                    >
                       {fmt(seg.start)}
-                    </span>
+                    </button>
                     {seg.text}
                   </p>
                 </div>

@@ -140,4 +140,26 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
         db.complete_job_subscription(conn, job, actual_duration, text, segments, result.get("language"))
     else:
         db.complete_job(conn, job, actual_duration, text, segments, result.get("language"))
+
+    # 6. Retain the compressed audio so the user can play it back next to the
+    #    transcript (cleaned up after AUDIO_RETENTION_DAYS by the sweep).
+    if config.AUDIO_RETENTION_DAYS > 0:
+        try:
+            key = f"audio/{job['id']}.ogg"
+            storage.persist(audio, key)
+            db.set_audio(conn, job["id"], key, config.AUDIO_RETENTION_DAYS)
+        except Exception:
+            log.warning("could not retain audio for job %s", job["id"], exc_info=True)
+
     log.info("job %s completed (%d segments)", job["id"], len(segments))
+
+
+def sweep_expired_audio(conn: psycopg.Connection) -> int:
+    """Delete retained audio whose retention window has passed."""
+    rows = conn.execute(
+        "SELECT id, audio_key FROM jobs WHERE audio_key IS NOT NULL AND audio_expires_at < now()"
+    ).fetchall()
+    for row in rows:
+        storage.delete_key(row["audio_key"])
+        conn.execute("UPDATE jobs SET audio_key = NULL WHERE id = %s", (row["id"],))
+    return len(rows)
