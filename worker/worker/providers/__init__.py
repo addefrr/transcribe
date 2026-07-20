@@ -1,11 +1,18 @@
-from .. import config
+from ..errors import JobError
+
+_BACKENDS = {"groq", "assemblyai", "local", "fake"}
 
 
-def get_provider():
-    if config.TRANSCRIBE_BACKEND == "runpod":
-        from . import runpod as provider
-    elif config.TRANSCRIBE_BACKEND == "fake":
+def get_provider(name: str):
+    """Resolve a transcription backend by name to its provider module."""
+    if name == "groq":
+        from . import groq as provider
+    elif name == "assemblyai":
+        from . import assemblyai as provider
+    elif name == "local":
+        from . import local as provider
+    elif name == "fake":
         from . import fake as provider
     else:
-        from . import local as provider
+        raise JobError(f"Unknown transcription backend {name!r}.")
     return provider

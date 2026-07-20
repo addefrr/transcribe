@@ -3,9 +3,10 @@
 Pay-as-you-go AI transcription. Users buy **credits** (Stripe), submit an
 **audio/video file or a URL** (YouTube or any direct media link), pick a
 **quality tier**, and get a transcript with timestamps plus TXT/SRT/VTT
-export. Transcription runs on open-source Whisper (via
-[faster-whisper](https://github.com/SYSTRAN/faster-whisper)) on the cheapest
-compute available — serverless GPUs that bill by the second and scale to zero.
+export. Transcription runs on managed speech-to-text APIs — Groq (Whisper
+large-v3-turbo) for the Standard tier and AssemblyAI for the Premium tier —
+behind a small provider interface, so swapping backends (or self-hosting
+faster-whisper) is a one-line config change.
 
 ## How it works
 
@@ -19,12 +20,12 @@ Browser ──► web/ (Next.js: auth, credits, Stripe, job API)
             worker/ (Python: yt-dlp ▸ ffmpeg ▸ transcribe ▸ settle credits)
                  │
                  ▼
-            gpu/ (RunPod Serverless, faster-whisper)   ← or local CPU/GPU
+     transcription API (Groq / AssemblyAI)   ← or local faster-whisper
 ```
 
-- **1 credit = 1 minute of Standard-tier audio.** Premium (Whisper `large-v3`)
-  costs 2 credits/min. Rates, packs and the signup bonus live in
-  `web/src/lib/pricing.ts`; the rate is frozen into each job at submission.
+- **1 credit = 1 minute of Standard-tier audio.** Premium costs 2 credits/min.
+  Rates, packs and the signup bonus live in `web/src/lib/pricing.ts`; the rate
+  is frozen into each job at submission.
 - Credits are **held** when a job's duration is known (metadata probe — no
   full download needed for most URLs), **charged** for actual duration on
   completion (never more than the hold), and **fully refunded** on failure.
@@ -52,36 +53,40 @@ npm run dev                            # http://localhost:3000
 
 # 3. Worker (separate shell)
 cd worker
-python3 -m venv .venv && .venv/bin/pip install -e ".[local]"
+python3 -m venv .venv && .venv/bin/pip install -e .
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/transcribe \
-  TRANSCRIBE_BACKEND=local WHISPER_MODEL_STANDARD=tiny \
+  GROQ_API_KEY=... ASSEMBLYAI_API_KEY=... \
   .venv/bin/python -m worker.main
 ```
 
 Sign up (new accounts get 10 free credits), upload a clip or paste a URL, and
-watch the job progress on the dashboard.
+watch the job progress on the dashboard. No API keys handy? Run the worker with
+`TRANSCRIBE_BACKEND=fake` to exercise the whole flow with canned transcripts.
 
 Dev conveniences (never enable in production):
 
 | Env | Effect |
 | --- | --- |
 | `DEV_FAKE_CHECKOUT=1` | "Buy" buttons credit the account instantly, no Stripe |
-| `TRANSCRIBE_BACKEND=fake` | Worker returns canned segments without any model |
+| `TRANSCRIBE_BACKEND=fake` | Worker returns canned segments, no API keys needed |
 | `SSRF_ALLOW_PRIVATE=1` | Allow URLs that resolve to private addresses |
-| `WHISPER_MODEL_STANDARD=tiny` | Tiny model = fast CPU transcription for testing |
 
 ## Configuration
 
 All knobs are environment variables — see [`.env.example`](.env.example) for
 the full annotated list. Highlights:
 
-- **Storage** — `STORAGE_DRIVER=local` (single machine, files under
-  `data/uploads/`) or `s3` (any S3-compatible store; Cloudflare R2 is ideal —
-  zero egress fees. MinIO ships in docker-compose: `docker compose --profile s3 up -d`).
-- **Transcription** — `TRANSCRIBE_BACKEND=local` runs faster-whisper in the
-  worker process (CPU or a local GPU); `runpod` sends audio to a RunPod
-  Serverless endpoint (see [`gpu/README.md`](gpu/README.md); requires `s3`
-  storage).
+- **Transcription** — each tier picks a backend + model via `STANDARD_BACKEND` /
+  `PREMIUM_BACKEND` (`groq` | `assemblyai` | `local` | `fake`). `groq` and
+  `assemblyai` need the matching API key. `local` runs
+  [faster-whisper](https://github.com/SYSTRAN/faster-whisper) in the worker
+  process (install with `pip install ".[local]"`; set `WHISPER_MODEL_*`) — the
+  genuinely-free, self-hosted path. `TRANSCRIBE_BACKEND` forces every tier onto
+  one backend.
+- **Storage** — `STORAGE_DRIVER=local` (files under `data/uploads/`) is fine in
+  production since the worker reads audio from disk; use `s3` (R2/MinIO/S3) only
+  when web and worker run on separate machines. MinIO ships in docker-compose:
+  `docker compose --profile s3 up -d`.
 - **Stripe** — set `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`, point a
   webhook at `POST /api/stripe/webhook` for `checkout.session.completed`.
 - **Limits** — `MAX_DURATION_SECONDS` (default 4 h), `MAX_FILESIZE_BYTES`
@@ -91,16 +96,16 @@ the full annotated list. Highlights:
 
 | Piece | Suggested home | Notes |
 | --- | --- | --- |
-| `web/` | Vercel / Fly.io | any Node host; set env vars from `.env.example` |
+| `web/` | Vercel | any Node host; set env vars from `.env.example` |
 | Postgres | Neon / Supabase / RDS | run `npm run db:migrate` on deploy |
-| `worker/` | Fly.io / Railway / any VM | `worker/Dockerfile`; scale by adding instances |
-| GPU | RunPod Serverless | build & push `gpu/`; scale-to-zero, per-second billing |
-| Storage | Cloudflare R2 | `STORAGE_DRIVER=s3`, free egress to RunPod |
+| `worker/` | Railway / Render / any small VM | `worker/Dockerfile`; a long-lived poll loop, scale by adding instances |
+| Transcription | Groq + AssemblyAI | just API keys — no GPU infra to run |
+| Storage | local disk, or Cloudflare R2 | R2 only if web/worker are on different hosts |
 
-Rough unit economics: `large-v3` on an RTX 4090 serverless worker
-(~$0.00031/s) transcribes at 10–20× realtime → **≈ $0.05–0.15 per audio-hour**
-of GPU cost, while an hour of Premium sells for 120 credits (≈ $4.80 at the
-Starter pack rate).
+Rough unit economics: Groq transcribes Whisper large-v3-turbo at ~$0.04/audio-
+hour and AssemblyAI Premium around $0.15–0.45/hour, versus an hour of Premium
+that sells for 120 credits (≈ $4.80 at the Starter pack rate) — compute is a
+low single-digit percentage of revenue.
 
 ## Security notes
 
@@ -122,7 +127,7 @@ Starter pack rate).
 ```
 web/      Next.js 15 app — UI, auth, credits, Stripe, job API, Drizzle schema
 worker/   Python worker — probe, download (yt-dlp), normalize (ffmpeg),
-          transcribe (faster-whisper local or RunPod), credit settlement
-gpu/      RunPod Serverless handler + Dockerfile (bakes Whisper models)
+          transcribe (Groq / AssemblyAI / local faster-whisper), settlement
+          worker/providers/ — one module per transcription backend
 drizzle migrations: web/drizzle/   ·   compose stack: docker-compose.yml
 ```

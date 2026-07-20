@@ -84,9 +84,10 @@ def _check_duration(duration: float) -> None:
 
 def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
     tier = job["tier"]
-    model_name = config.TIER_MODELS.get(tier)
-    if model_name is None:
+    backend = config.TRANSCRIBE_BACKEND or config.TIER_BACKENDS.get(tier)
+    if backend is None:
         raise JobError(f"Unknown quality tier {tier!r}.")
+    model_name = config.TIER_MODELS.get(tier, "")
 
     # 1. Probe duration (cheap, no full download) and reserve credits.
     #    Direct file URLs expose no duration metadata, so for those the hold
@@ -120,7 +121,7 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
 
     # 4. Transcribe.
     db.set_status(conn, job["id"], "transcribing")
-    provider = providers.get_provider()
+    provider = providers.get_provider(backend)
     result = provider.transcribe(audio, model_name, job)
 
     # 5. Store transcript and settle credits.

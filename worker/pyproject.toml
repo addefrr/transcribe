@@ -1,7 +1,7 @@
 [project]
 name = "transcribe-worker"
 version = "0.1.0"
-description = "Background worker: downloads media, normalizes audio, transcribes via faster-whisper (local or RunPod serverless), settles credits."
+description = "Background worker: downloads media, normalizes audio, transcribes via Groq/AssemblyAI (or local faster-whisper), settles credits."
 requires-python = ">=3.11"
 dependencies = [
     "psycopg[binary]>=3.1",
@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Only needed for TRANSCRIBE_BACKEND=local (runs Whisper on this machine).
+# Only needed when a tier's backend is "local" (runs Whisper on this machine).
 local = ["faster-whisper>=1.0"]
 
 [project.scripts]

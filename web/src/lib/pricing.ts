@@ -2,20 +2,20 @@
 // 1 credit = 1 minute of Standard-tier transcription.
 //
 // The credits/minute rate is copied into each job row at submission time, so
-// changing these numbers never affects jobs already in flight. Which Whisper
-// model each tier maps to is the worker's concern (WHISPER_MODEL_* env vars).
+// changing these numbers never affects jobs already in flight. Which backend +
+// model each tier maps to is the worker's concern (STANDARD_/PREMIUM_ env vars).
 
 export const TIERS = {
   standard: {
     label: "Standard",
     creditsPerMinute: 1,
-    description: "Fast and accurate for clear recordings (Whisper small).",
+    description: "Fast, accurate transcription in ~99 languages (Whisper large-v3-turbo).",
   },
   premium: {
     label: "Premium",
     creditsPerMinute: 2,
     description:
-      "Highest accuracy for noisy audio, heavy accents and 90+ languages (Whisper large-v3).",
+      "Top accuracy for long recordings, noisy audio and heavy accents — best for meetings & podcasts.",
   },
 } as const;
 

@@ -12,11 +12,10 @@ def run() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
-    log.info(
-        "worker starting (backend=%s, storage=%s)",
-        config.TRANSCRIBE_BACKEND,
-        config.STORAGE_DRIVER,
+    backends = config.TRANSCRIBE_BACKEND or ", ".join(
+        f"{tier}={b}" for tier, b in config.TIER_BACKENDS.items()
     )
+    log.info("worker starting (backends: %s, storage=%s)", backends, config.STORAGE_DRIVER)
     conn = db.connect()
     last_stale_sweep = 0.0
     while True:

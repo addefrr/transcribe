@@ -7,8 +7,8 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY worker ./worker
 
-# ".[local]" bundles faster-whisper so the image also works with
-# TRANSCRIBE_BACKEND=local; drop the extra for a slim RunPod-only worker.
-RUN pip install --no-cache-dir ".[local]"
+# Default install talks to the managed APIs (Groq/AssemblyAI) — no heavy ML deps.
+# For a self-hosted faster-whisper worker, build with:  pip install ".[local]"
+RUN pip install --no-cache-dir .
 
 CMD ["transcribe-worker"]
