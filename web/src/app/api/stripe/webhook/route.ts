@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { grantCredits } from "@/lib/credits";
+import { getSettings } from "@/lib/settings";
 import { getStripe } from "@/lib/stripe";
+import { activateSubscription } from "@/lib/subscriptions";
 
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
@@ -31,19 +33,32 @@ export async function POST(req: NextRequest) {
   ) {
     const session = event.data.object;
     const userId = session.metadata?.userId;
+    if (session.payment_status !== "paid" || !userId) {
+      return NextResponse.json({ received: true });
+    }
+
+    // Subscription / week-pass purchase.
+    const planId = session.metadata?.planId;
+    if (planId) {
+      const settings = await getSettings();
+      const plan = settings.subscriptionPlans.find((p) => p.id === planId);
+      if (plan) {
+        await activateSubscription(
+          userId,
+          plan,
+          settings,
+          typeof session.subscription === "string" ? session.subscription : undefined,
+        );
+      }
+      return NextResponse.json({ received: true });
+    }
+
+    // Credit-pack / custom purchase.
     const credits = Number(session.metadata?.credits);
-    if (
-      session.payment_status !== "paid" ||
-      !userId ||
-      !Number.isInteger(credits) ||
-      credits <= 0
-    ) {
-      // Unpaid yet, not one of our sessions, or corrupted metadata — ack and move on.
+    if (!Number.isInteger(credits) || credits <= 0) {
       return NextResponse.json({ received: true });
     }
     // Idempotent by event id: Stripe retries deliveries, credits apply once.
-    // (A paid `completed` and a later `async_payment_succeeded` never both
-    // fire for one session, so the two event types can't double-credit.)
     await grantCredits(userId, credits, "purchase", {
       stripeEventId: event.id,
       amountUsdCents: session.amount_total ?? undefined,

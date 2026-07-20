@@ -147,6 +147,77 @@ export default async function SettingsPage({
           </div>
         </section>
 
+        {/* Subscriptions */}
+        <section>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+            Subscriptions
+          </h2>
+          <label className="mt-3 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="subscriptionsEnabled"
+              defaultChecked={s.subscriptionsEnabled}
+            />
+            Offer subscriptions
+          </label>
+          <div className="mt-4 grid max-w-md gap-6 sm:grid-cols-2">
+            <div>
+              <label className={labelCls}>Standard compute cost (¢/min)</label>
+              <input
+                name="cost_standard"
+                type="number"
+                step="0.001"
+                min={0.001}
+                defaultValue={s.costPerMinuteCents.standard}
+                className={field}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Premium compute cost (¢/min)</label>
+              <input
+                name="cost_premium"
+                type="number"
+                step="0.001"
+                min={0.001}
+                defaultValue={s.costPerMinuteCents.premium}
+                className={field}
+              />
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-zinc-400">
+            Fair-use allowance = plan price × cap% ÷ compute cost. Higher compute cost or lower
+            cap = fewer included minutes.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {s.subscriptionPlans.map((plan) => (
+              <div key={plan.id} className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
+                <p className="text-xs uppercase tracking-wide text-zinc-400">
+                  {plan.tier} · {plan.interval}
+                </p>
+                <label className={`${labelCls} mt-2`}>Label</label>
+                <input name={`plan_${plan.id}_label`} defaultValue={plan.label} className={field} />
+                <label className={`${labelCls} mt-3`}>Price (US cents)</label>
+                <input
+                  name={`plan_${plan.id}_cents`}
+                  type="number"
+                  min={50}
+                  defaultValue={plan.priceUsdCents}
+                  className={field}
+                />
+                <label className={`${labelCls} mt-3`}>Fair-use cap (% of price)</label>
+                <input
+                  name={`plan_${plan.id}_cap`}
+                  type="number"
+                  min={1}
+                  max={100}
+                  defaultValue={plan.capPct}
+                  className={field}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+
         <button
           type="submit"
           className="rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-indigo-500"

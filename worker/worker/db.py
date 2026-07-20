@@ -160,6 +160,47 @@ def complete_job(
         )
 
 
+def complete_job_subscription(
+    conn: psycopg.Connection,
+    job: dict[str, Any],
+    actual_duration: float,
+    text: str,
+    segments: list[dict[str, Any]],
+    language: Optional[str],
+) -> None:
+    """Store the transcript and draw the audio minutes from the subscription's
+    allowance instead of charging credits. Idempotent per job."""
+    minutes = max(1, math.ceil(actual_duration / 60))
+    with conn.transaction():
+        row = conn.execute(
+            "SELECT status, subscription_id FROM jobs WHERE id = %s FOR UPDATE",
+            (job["id"],),
+        ).fetchone()
+        if row["status"] == "completed":
+            return
+        if row["subscription_id"]:
+            conn.execute(
+                "UPDATE subscriptions SET minutes_used = minutes_used + %s WHERE id = %s",
+                (minutes, row["subscription_id"]),
+            )
+        conn.execute(
+            """
+            INSERT INTO transcripts (job_id, text, segments)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (job_id) DO UPDATE SET text = EXCLUDED.text, segments = EXCLUDED.segments
+            """,
+            (job["id"], text, Jsonb(segments)),
+        )
+        conn.execute(
+            """
+            UPDATE jobs SET status = 'completed', credits_charged = 0, duration_seconds = %s,
+                            language = %s, error = NULL, updated_at = now()
+            WHERE id = %s
+            """,
+            (actual_duration, language, job["id"]),
+        )
+
+
 def fail_job(conn: psycopg.Connection, job: dict[str, Any], error: str) -> None:
     """Mark failed and release the full hold, if one was placed."""
     with conn.transaction():

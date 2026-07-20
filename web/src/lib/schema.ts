@@ -56,6 +56,8 @@ export const jobs = pgTable("jobs", {
   outputName: text("output_name"),
   tier: text("tier").notNull(),
   creditsPerMinute: integer("credits_per_minute").notNull(),
+  billing: text("billing").notNull().default("credits"), // credits | subscription
+  subscriptionId: uuid("subscription_id"),
   languageHint: text("language_hint"), // ISO-639-1 code, or null for auto-detect
 
   // pending -> probing -> downloading -> transcribing -> completed | failed
@@ -89,6 +91,31 @@ export const settings = pgTable("settings", {
   value: jsonb("value").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Active/past subscriptions. A user has at most one active row (enforced in app
+// logic). Fair-use is metered by minutesUsed against allowanceMinutes per period.
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    planId: text("plan_id").notNull(), // matches a SubscriptionPlan.id
+    tier: text("tier").notNull(), // standard | premium
+    interval: text("interval").notNull(), // month | year | week
+    status: text("status").notNull().default("active"), // active | canceled | expired
+    allowanceMinutes: integer("allowance_minutes").notNull(),
+    minutesUsed: integer("minutes_used").notNull().default(0),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull().defaultNow(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    stripeSubscriptionId: text("stripe_subscription_id").unique(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("subscriptions_user_idx").on(t.userId, t.status)],
+);
+
+export type Subscription = typeof subscriptions.$inferSelect;
 
 export type TranscriptSegment = {
   start: number;

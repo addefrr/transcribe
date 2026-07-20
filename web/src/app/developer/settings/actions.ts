@@ -4,7 +4,13 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/admin";
 import { TIER_KEYS } from "@/lib/pricing";
-import { getSettings, setSetting, type Pack, type TierConfig } from "@/lib/settings";
+import {
+  getSettings,
+  setSetting,
+  type Pack,
+  type SubscriptionPlan,
+  type TierConfig,
+} from "@/lib/settings";
 
 function num(form: FormData, name: string, fallback: number): number {
   const v = Number(form.get(name));
@@ -55,6 +61,23 @@ export async function saveSettings(formData: FormData): Promise<void> {
     "minPurchaseUsdCents",
     Math.max(50, Math.round(num(formData, "minPurchaseUsdCents", current.minPurchaseUsdCents))),
   );
+
+  // Subscriptions: toggle, per-tier compute cost, and per-plan price/cap/label.
+  await setSetting("subscriptionsEnabled", formData.get("subscriptionsEnabled") === "on");
+  await setSetting("costPerMinuteCents", {
+    standard: Math.max(
+      0.001,
+      num(formData, "cost_standard", current.costPerMinuteCents.standard),
+    ),
+    premium: Math.max(0.001, num(formData, "cost_premium", current.costPerMinuteCents.premium)),
+  });
+  const plans: SubscriptionPlan[] = current.subscriptionPlans.map((plan) => ({
+    ...plan,
+    label: String(formData.get(`plan_${plan.id}_label`) ?? plan.label).slice(0, 60),
+    priceUsdCents: Math.max(50, Math.round(num(formData, `plan_${plan.id}_cents`, plan.priceUsdCents))),
+    capPct: Math.min(100, Math.max(1, num(formData, `plan_${plan.id}_cap`, plan.capPct))),
+  }));
+  await setSetting("subscriptionPlans", plans);
 
   redirect("/developer/settings?saved=1");
 }

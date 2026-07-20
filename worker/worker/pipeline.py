@@ -89,6 +89,10 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
     if backend is None:
         raise JobError(f"Unknown quality tier {tier!r}.")
 
+    # Subscription-billed jobs draw on a minute allowance instead of credits, so
+    # they skip credit holds entirely and settle against the subscription.
+    on_subscription = job.get("billing") == "subscription"
+
     # 1. Probe duration (cheap, no full download) and reserve credits.
     #    Direct file URLs expose no duration metadata, so for those the hold
     #    happens right after the (size-capped) download instead.
@@ -105,8 +109,9 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
 
     if est_duration is not None:
         _check_duration(est_duration)
-        held = db.place_hold(conn, job, est_duration)
-        log.info("job %s: %.0fs of audio, %d credits held", job["id"], est_duration, held)
+        if not on_subscription:
+            held = db.place_hold(conn, job, est_duration)
+            log.info("job %s: %.0fs of audio, %d credits held", job["id"], est_duration, held)
 
     # 2. Fetch the full media (uploads were already fetched by the probe).
     db.set_status(conn, job["id"], "downloading")
@@ -115,8 +120,9 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
     if est_duration is None:
         est_duration = media.probe_file(src)
         _check_duration(est_duration)
-        held = db.place_hold(conn, job, est_duration)
-        log.info("job %s: %.0fs of audio, %d credits held", job["id"], est_duration, held)
+        if not on_subscription:
+            held = db.place_hold(conn, job, est_duration)
+            log.info("job %s: %.0fs of audio, %d credits held", job["id"], est_duration, held)
 
     # 3. Normalize to compact mono audio; its ffprobe duration is what we bill.
     audio = media.normalize(src, workdir)
@@ -127,8 +133,11 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
     provider = providers.get_provider(backend)
     result = provider.transcribe(audio, model_name, job, language=language_hint)
 
-    # 5. Store transcript and settle credits.
+    # 5. Store transcript and settle (credits or subscription minutes).
     segments = result["segments"]
     text = "\n".join(s["text"] for s in segments if s["text"])
-    db.complete_job(conn, job, actual_duration, text, segments, result.get("language"))
+    if on_subscription:
+        db.complete_job_subscription(conn, job, actual_duration, text, segments, result.get("language"))
+    else:
+        db.complete_job(conn, job, actual_duration, text, segments, result.get("language"))
     log.info("job %s completed (%d segments)", job["id"], len(segments))

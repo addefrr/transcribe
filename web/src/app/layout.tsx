@@ -47,6 +47,9 @@ export default async function RootLayout({
                   >
                     {user.creditBalance} credits left
                   </Link>
+                  <Link href="/plans" className="hover:underline">
+                    Plans
+                  </Link>
                   <Link href="/dashboard" className="hover:underline">
                     My transcriptions
                   </Link>

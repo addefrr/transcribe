@@ -8,6 +8,16 @@ import { settings as settingsTable } from "./schema";
 
 export type { Pack, TierConfig, TierKey } from "./pricing";
 
+export interface SubscriptionPlan {
+  id: string; // e.g. "standard_monthly"
+  tier: TierKey; // tier this unlocks; "premium" also covers "standard"
+  label: string;
+  interval: "month" | "year" | "week"; // week = one-time 7-day pass
+  priceUsdCents: number;
+  /** Fair-use: usage is capped so our compute cost stays under this % of price. */
+  capPct: number;
+}
+
 export interface Settings {
   tiers: Record<TierKey, TierConfig>;
   packs: Pack[];
@@ -16,6 +26,16 @@ export interface Settings {
   usdCentsPerCredit: number;
   /** Minimum custom purchase, in cents. */
   minPurchaseUsdCents: number;
+  /** Estimated API/compute cost per audio-minute, per tier, in cents. */
+  costPerMinuteCents: Record<TierKey, number>;
+  subscriptionsEnabled: boolean;
+  subscriptionPlans: SubscriptionPlan[];
+}
+
+/** Fair-use minute allowance for a plan's period: price × cap% ÷ cost/minute. */
+export function planAllowanceMinutes(plan: SubscriptionPlan, s: Settings): number {
+  const costPerMin = s.costPerMinuteCents[plan.tier] || 0.1;
+  return Math.max(1, Math.floor((plan.priceUsdCents * (plan.capPct / 100)) / costPerMin));
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -41,6 +61,20 @@ export const DEFAULT_SETTINGS: Settings = {
   signupBonusCredits: 10,
   usdCentsPerCredit: 4, // matches the Creator pack rate ($20 / 500)
   minPurchaseUsdCents: 100, // $1
+  // Rough API cost per audio-minute: Standard (Qwen/Groq ~$0.04/hr ≈ 0.07¢/min),
+  // Premium (AssemblyAI ~$0.30/hr = 0.5¢/min). Drives the fair-use allowance.
+  costPerMinuteCents: { standard: 0.1, premium: 0.5 },
+  subscriptionsEnabled: true,
+  subscriptionPlans: [
+    // "annual = half the monthly rate" → 6× monthly for the year (50% off).
+    // "week pass = half the monthly price" → one-time 7-day pass.
+    { id: "standard_monthly", tier: "standard", label: "Standard Monthly", interval: "month", priceUsdCents: 550, capPct: 50 },
+    { id: "standard_annual", tier: "standard", label: "Standard Annual", interval: "year", priceUsdCents: 3300, capPct: 50 },
+    { id: "standard_week", tier: "standard", label: "Standard Week Pass", interval: "week", priceUsdCents: 275, capPct: 50 },
+    { id: "premium_monthly", tier: "premium", label: "Premium Monthly", interval: "month", priceUsdCents: 1200, capPct: 50 },
+    { id: "premium_annual", tier: "premium", label: "Premium Annual", interval: "year", priceUsdCents: 7200, capPct: 50 },
+    { id: "premium_week", tier: "premium", label: "Premium Week Pass", interval: "week", priceUsdCents: 600, capPct: 50 },
+  ],
 };
 
 // Short-TTL cache so hot paths (job submit, every page render) don't hit the DB

@@ -9,6 +9,11 @@ import { getSettings } from "@/lib/settings";
 import { jobs } from "@/lib/schema";
 import { isValidUploadKey } from "@/lib/storage";
 import { screenUrl } from "@/lib/ssrf";
+import {
+  getActiveSubscription,
+  remainingMinutes,
+  subscriptionCovers,
+} from "@/lib/subscriptions";
 
 const MAX_ACTIVE_JOBS = Number(process.env.MAX_ACTIVE_JOBS_PER_USER ?? 3);
 const ACTIVE = ["pending", "probing", "downloading", "transcribing"];
@@ -47,9 +52,16 @@ export async function POST(req: NextRequest) {
   if (languageHint && !isLanguageCode(languageHint)) {
     return NextResponse.json({ error: "Unsupported language" }, { status: 400 });
   }
-  if (user.creditBalance <= 0) {
+
+  // A subscription covering this tier (with allowance left) bills the job to the
+  // subscription; otherwise it's billed to credits and needs a positive balance.
+  const sub = await getActiveSubscription(user.id);
+  const coveredBySub =
+    sub && subscriptionCovers(sub, body.tier) && remainingMinutes(sub) > 0;
+  const billing = coveredBySub ? "subscription" : "credits";
+  if (!coveredBySub && user.creditBalance <= 0) {
     return NextResponse.json(
-      { error: "You have no credits. Buy a credit pack first." },
+      { error: "You have no credits. Buy credits or start a subscription first." },
       { status: 402 },
     );
   }
@@ -89,6 +101,8 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       tier: body.tier,
       creditsPerMinute: settings.tiers[body.tier].creditsPerMinute,
+      billing,
+      subscriptionId: coveredBySub ? sub!.id : null,
       languageHint,
       ...values,
     })
