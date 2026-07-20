@@ -17,6 +17,7 @@ venv/
 data/
 pgdata/
 *.log
+.run/
 
 # editor
 .DS_Store
