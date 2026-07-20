@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { isLanguageCode } from "@/lib/languages";
 import { isTier, TIERS } from "@/lib/pricing";
 import { jobs } from "@/lib/schema";
 import { isValidUploadKey } from "@/lib/storage";
@@ -16,12 +17,14 @@ const bodySchema = z.discriminatedUnion("sourceType", [
     sourceType: z.literal("url"),
     url: z.string().min(1).max(2000),
     tier: z.string(),
+    language: z.string().optional(),
   }),
   z.object({
     sourceType: z.literal("upload"),
     uploadKey: z.string(),
     originalFilename: z.string().max(300).optional(),
     tier: z.string(),
+    language: z.string().optional(),
   }),
 ]);
 
@@ -36,6 +39,11 @@ export async function POST(req: NextRequest) {
   const body = parsed.data;
   if (!isTier(body.tier)) {
     return NextResponse.json({ error: "Unknown quality tier" }, { status: 400 });
+  }
+  // Empty/absent language means auto-detect; a non-empty value must be one we offer.
+  const languageHint = body.language || null;
+  if (languageHint && !isLanguageCode(languageHint)) {
+    return NextResponse.json({ error: "Unsupported language" }, { status: 400 });
   }
   if (user.creditBalance <= 0) {
     return NextResponse.json(
@@ -77,6 +85,7 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       tier: body.tier,
       creditsPerMinute: TIERS[body.tier].creditsPerMinute,
+      languageHint,
       ...values,
     })
     .returning();

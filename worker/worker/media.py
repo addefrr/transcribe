@@ -91,6 +91,37 @@ def probe_file(path: str) -> float:
     return duration
 
 
+def segment(src: str, workdir: str, seconds: int) -> list[tuple[float, str]]:
+    """Split audio into ≤`seconds` chunks. Returns (offset_seconds, path) pairs;
+    offsets come from each chunk's real probed duration, so timestamps stitched
+    back with them don't drift even if ffmpeg snaps cuts to packet boundaries."""
+    pattern = os.path.join(workdir, "chunk_%04d.ogg")
+    proc = subprocess.run(
+        [
+            "ffmpeg", "-y", "-v", "error",
+            "-i", src,
+            "-f", "segment", "-segment_time", str(seconds),
+            # Reset each segment's clock to 0 so its probed duration is its own
+            # length, not a cumulative end-timestamp inherited from the source.
+            "-reset_timestamps", "1", "-c", "copy",
+            pattern,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise JobError(f"Audio segmentation failed: {proc.stderr.strip()[:500]}")
+    paths = sorted(glob.glob(os.path.join(workdir, "chunk_*.ogg")))
+    if not paths:
+        raise JobError("Audio segmentation produced no chunks.")
+    chunks: list[tuple[float, str]] = []
+    offset = 0.0
+    for path in paths:
+        chunks.append((offset, path))
+        offset += probe_file(path)
+    return chunks
+
+
 def normalize(src: str, workdir: str) -> str:
     """Extract mono Opus audio — small enough to ship to a GPU endpoint quickly,
     and directly decodable by faster-whisper."""

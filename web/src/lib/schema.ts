@@ -52,6 +52,8 @@ export const jobs = pgTable("jobs", {
   originalFilename: text("original_filename"),
   tier: text("tier").notNull(),
   creditsPerMinute: integer("credits_per_minute").notNull(),
+  languageHint: text("language_hint"), // ISO-639-1 code, or null for auto-detect
+
   // pending -> probing -> downloading -> transcribing -> completed | failed
   status: text("status").notNull().default("pending"),
   durationSeconds: doublePrecision("duration_seconds"),

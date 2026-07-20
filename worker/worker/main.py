@@ -12,8 +12,8 @@ def run() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
-    backends = config.TRANSCRIBE_BACKEND or ", ".join(
-        f"{tier}={b}" for tier, b in config.TIER_BACKENDS.items()
+    backends = config.TRANSCRIBE_BACKEND or (
+        f"standard=qwen(+{config.STANDARD_FALLBACK_BACKEND}), premium={config.PREMIUM_BACKEND}"
     )
     log.info("worker starting (backends: %s, storage=%s)", backends, config.STORAGE_DRIVER)
     conn = db.connect()

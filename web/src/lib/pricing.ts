@@ -9,7 +9,8 @@ export const TIERS = {
   standard: {
     label: "Standard",
     creditsPerMinute: 1,
-    description: "Fast, accurate transcription in ~99 languages (Whisper large-v3-turbo).",
+    description:
+      "Fast, accurate, great value — Qwen3-ASR for major languages, Whisper large-v3-turbo for the rest.",
   },
   premium: {
     label: "Premium",

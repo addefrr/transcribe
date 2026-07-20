@@ -1,11 +1,13 @@
 from ..errors import JobError
 
-_BACKENDS = {"groq", "assemblyai", "local", "fake"}
+_BACKENDS = {"qwen", "groq", "assemblyai", "local", "fake"}
 
 
 def get_provider(name: str):
     """Resolve a transcription backend by name to its provider module."""
-    if name == "groq":
+    if name == "qwen":
+        from . import qwen as provider
+    elif name == "groq":
         from . import groq as provider
     elif name == "assemblyai":
         from . import assemblyai as provider

@@ -22,24 +22,34 @@ S3_ACCESS_KEY_ID = os.environ.get("S3_ACCESS_KEY_ID", "")
 S3_SECRET_ACCESS_KEY = os.environ.get("S3_SECRET_ACCESS_KEY", "")
 S3_FORCE_PATH_STYLE = os.environ.get("S3_FORCE_PATH_STYLE", "1") == "1"
 
-# Per-tier transcription backend + model. The backend names a provider module
-# in worker/providers/; the model string is passed to it (its meaning is
-# provider-specific). Defaults: Standard → Groq (Whisper large-v3-turbo, cheap,
-# fast, ~99 languages); Premium → AssemblyAI (long-form accuracy).
+# Transcription routing (see worker/routing.py). The Standard tier is
+# language-routed: Qwen3-ASR for the languages it covers well (cheaper + more
+# accurate, especially English/Asian), and Whisper large-v3-turbo via Groq for
+# the long-tail languages Qwen doesn't support. The Premium tier is AssemblyAI.
 #
-# TRANSCRIBE_BACKEND, if set, overrides every tier — handy for running the whole
-# stack on one backend (e.g. "local" for self-hosted faster-whisper, or "fake"
-# for tests).
+# TRANSCRIBE_BACKEND, if set, forces every job onto one backend — handy for a
+# fully self-hosted setup ("local") or tests ("fake").
 TRANSCRIBE_BACKEND = os.environ.get("TRANSCRIBE_BACKEND", "")
 
-TIER_BACKENDS = {
-    "standard": os.environ.get("STANDARD_BACKEND", "groq"),
-    "premium": os.environ.get("PREMIUM_BACKEND", "assemblyai"),
-}
-TIER_MODELS = {
-    "standard": os.environ.get("STANDARD_MODEL", "whisper-large-v3-turbo"),
-    "premium": os.environ.get("PREMIUM_MODEL", "best"),
-}
+# ISO-639-1 codes Qwen3-ASR-Flash handles; a Standard job whose language hint is
+# anything else routes to the fallback backend instead.
+QWEN_LANGUAGES = frozenset(
+    os.environ.get("QWEN_LANGUAGES", "zh,en,ja,ko,ar,fr,de,es,it,pt,ru").split(",")
+)
+QWEN_MODEL = os.environ.get("QWEN_MODEL", "qwen3-asr-flash")
+STANDARD_FALLBACK_BACKEND = os.environ.get("STANDARD_FALLBACK_BACKEND", "groq")
+STANDARD_FALLBACK_MODEL = os.environ.get("STANDARD_FALLBACK_MODEL", "whisper-large-v3-turbo")
+PREMIUM_BACKEND = os.environ.get("PREMIUM_BACKEND", "assemblyai")
+PREMIUM_MODEL = os.environ.get("PREMIUM_MODEL", "best")
+
+# --- Qwen (DashScope, OpenAI-compatible) ---
+QWEN_API_KEY = os.environ.get("QWEN_API_KEY", "")
+QWEN_BASE_URL = os.environ.get(
+    "QWEN_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+)
+# Qwen3-ASR-Flash caps each request at ~3 min / 10 MB, so longer audio is split
+# into chunks and stitched back together with offset timestamps.
+QWEN_CHUNK_SECONDS = int(os.environ.get("QWEN_CHUNK_SECONDS", "170"))
 
 # --- Groq (OpenAI-compatible speech-to-text) ---
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")

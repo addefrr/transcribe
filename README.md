@@ -2,11 +2,17 @@
 
 Pay-as-you-go AI transcription. Users buy **credits** (Stripe), submit an
 **audio/video file or a URL** (YouTube or any direct media link), pick a
-**quality tier**, and get a transcript with timestamps plus TXT/SRT/VTT
-export. Transcription runs on managed speech-to-text APIs — Groq (Whisper
-large-v3-turbo) for the Standard tier and AssemblyAI for the Premium tier —
-behind a small provider interface, so swapping backends (or self-hosting
-faster-whisper) is a one-line config change.
+**quality tier** and language, and get a transcript with timestamps plus
+TXT/SRT/VTT export. Transcription runs on managed speech-to-text APIs behind a
+small provider interface, so swapping backends (or self-hosting faster-whisper)
+is a config change.
+
+- **Standard tier is language-routed**: [Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR)
+  for the languages it covers well (cheaper and more accurate, especially
+  English and Asian languages), and Whisper large-v3-turbo via Groq for the
+  long-tail languages Qwen doesn't support. The user's language choice at
+  submission drives the routing; "Auto" stays on Qwen (which auto-detects).
+- **Premium tier**: AssemblyAI, for best-in-class long-form accuracy.
 
 ## How it works
 
@@ -20,7 +26,7 @@ Browser ──► web/ (Next.js: auth, credits, Stripe, job API)
             worker/ (Python: yt-dlp ▸ ffmpeg ▸ transcribe ▸ settle credits)
                  │
                  ▼
-     transcription API (Groq / AssemblyAI)   ← or local faster-whisper
+  transcription API (Qwen / Groq / AssemblyAI)   ← routed by tier + language
 ```
 
 - **1 credit = 1 minute of Standard-tier audio.** Premium costs 2 credits/min.
@@ -76,13 +82,16 @@ Dev conveniences (never enable in production):
 All knobs are environment variables — see [`.env.example`](.env.example) for
 the full annotated list. Highlights:
 
-- **Transcription** — each tier picks a backend + model via `STANDARD_BACKEND` /
-  `PREMIUM_BACKEND` (`groq` | `assemblyai` | `local` | `fake`). `groq` and
-  `assemblyai` need the matching API key. `local` runs
-  [faster-whisper](https://github.com/SYSTRAN/faster-whisper) in the worker
-  process (install with `pip install ".[local]"`; set `WHISPER_MODEL_*`) — the
-  genuinely-free, self-hosted path. `TRANSCRIBE_BACKEND` forces every tier onto
-  one backend.
+- **Transcription** — routing lives in `worker/worker/routing.py`. Standard-tier
+  jobs go to Qwen (`QWEN_API_KEY`) unless the chosen language isn't in
+  `QWEN_LANGUAGES`, in which case they fall back to `STANDARD_FALLBACK_BACKEND`
+  (Groq, `GROQ_API_KEY`). Premium jobs go to `PREMIUM_BACKEND` (AssemblyAI,
+  `ASSEMBLYAI_API_KEY`). Backends are `qwen | groq | assemblyai | local | fake`;
+  `local` runs [faster-whisper](https://github.com/SYSTRAN/faster-whisper) in
+  the worker (install `pip install ".[local]"`, set `WHISPER_MODEL_*`) — the
+  genuinely-free self-hosted path. `TRANSCRIBE_BACKEND` forces every job onto one
+  backend. Qwen's API caps requests at ~3 min, so the worker splits longer audio
+  into `QWEN_CHUNK_SECONDS` chunks and stitches the timestamps back together.
 - **Storage** — `STORAGE_DRIVER=local` (files under `data/uploads/`) is fine in
   production since the worker reads audio from disk; use `s3` (R2/MinIO/S3) only
   when web and worker run on separate machines. MinIO ships in docker-compose:
@@ -99,7 +108,7 @@ the full annotated list. Highlights:
 | `web/` | Vercel | any Node host; set env vars from `.env.example` |
 | Postgres | Neon / Supabase / RDS | run `npm run db:migrate` on deploy |
 | `worker/` | Railway / Render / any small VM | `worker/Dockerfile`; a long-lived poll loop, scale by adding instances |
-| Transcription | Groq + AssemblyAI | just API keys — no GPU infra to run |
+| Transcription | Qwen + Groq + AssemblyAI | just API keys — no GPU infra to run |
 | Storage | local disk, or Cloudflare R2 | R2 only if web/worker are on different hosts |
 
 Rough unit economics: Groq transcribes Whisper large-v3-turbo at ~$0.04/audio-
@@ -127,7 +136,8 @@ low single-digit percentage of revenue.
 ```
 web/      Next.js 15 app — UI, auth, credits, Stripe, job API, Drizzle schema
 worker/   Python worker — probe, download (yt-dlp), normalize (ffmpeg),
-          transcribe (Groq / AssemblyAI / local faster-whisper), settlement
+          transcribe (Qwen / Groq / AssemblyAI / local faster-whisper), settle
+          worker/routing.py — tier + language → backend
           worker/providers/ — one module per transcription backend
 drizzle migrations: web/drizzle/   ·   compose stack: docker-compose.yml
 ```

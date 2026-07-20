@@ -6,7 +6,7 @@ from typing import Any
 
 import psycopg
 
-from . import config, db, media, providers, ssrf, storage
+from . import config, db, media, providers, routing, ssrf, storage
 from .errors import JobError
 
 log = logging.getLogger(__name__)
@@ -84,10 +84,10 @@ def _check_duration(duration: float) -> None:
 
 def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
     tier = job["tier"]
-    backend = config.TRANSCRIBE_BACKEND or config.TIER_BACKENDS.get(tier)
+    language_hint = job.get("language_hint") or None
+    backend, model_name = routing.resolve(tier, language_hint)
     if backend is None:
         raise JobError(f"Unknown quality tier {tier!r}.")
-    model_name = config.TIER_MODELS.get(tier, "")
 
     # 1. Probe duration (cheap, no full download) and reserve credits.
     #    Direct file URLs expose no duration metadata, so for those the hold
@@ -119,10 +119,10 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
     audio = media.normalize(src, workdir)
     actual_duration = media.probe_file(audio)
 
-    # 4. Transcribe.
+    # 4. Transcribe (passing the user's language hint, if any).
     db.set_status(conn, job["id"], "transcribing")
     provider = providers.get_provider(backend)
-    result = provider.transcribe(audio, model_name, job)
+    result = provider.transcribe(audio, model_name, job, language=language_hint)
 
     # 5. Store transcript and settle credits.
     segments = result["segments"]

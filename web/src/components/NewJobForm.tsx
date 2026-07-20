@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { LANGUAGES } from "@/lib/languages";
 import { estimateCredits, TIERS, type Tier } from "@/lib/pricing";
 
 async function getMediaDuration(file: File): Promise<number | null> {
@@ -23,6 +24,7 @@ async function getMediaDuration(file: File): Promise<number | null> {
 export default function NewJobForm() {
   const [mode, setMode] = useState<"upload" | "url">("upload");
   const [tier, setTier] = useState<Tier>("standard");
+  const [language, setLanguage] = useState(""); // "" = auto-detect
   const [file, setFile] = useState<File | null>(null);
   const [fileDuration, setFileDuration] = useState<number | null>(null);
   const [url, setUrl] = useState("");
@@ -69,10 +71,11 @@ export default function NewJobForm() {
           uploadKey: key,
           originalFilename: file.name,
           tier,
+          language,
         };
       } else {
         if (!url.trim()) throw new Error("Paste a URL first.");
-        body = { sourceType: "url", url: url.trim(), tier };
+        body = { sourceType: "url", url: url.trim(), tier, language };
       }
 
       setBusy("Queueing job…");
@@ -166,6 +169,26 @@ export default function NewJobForm() {
           </label>
         ))}
       </fieldset>
+
+      <label className="mt-5 block">
+        <span className="mb-1 block text-sm text-zinc-600 dark:text-zinc-400">Language</span>
+        <select
+          value={language}
+          onChange={(e) => setLanguage(e.target.value)}
+          className="w-full max-w-xs rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700"
+        >
+          <option value="">Auto-detect (recommended)</option>
+          {LANGUAGES.map((l) => (
+            <option key={l.code} value={l.code}>
+              {l.name}
+            </option>
+          ))}
+        </select>
+        <span className="mt-1 block text-xs text-zinc-500">
+          Leave on auto unless detection struggles. Picking a language can improve
+          accuracy and, on the Standard tier, routes to the engine best suited to it.
+        </span>
+      </label>
 
       <div className="mt-5 flex items-center gap-4">
         <button
