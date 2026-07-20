@@ -1,5 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import CustomAmount from "@/components/CustomAmount";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
@@ -22,7 +23,7 @@ export default async function CreditsPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const params = await searchParams;
-  const { packs } = await getSettings();
+  const { packs, usdCentsPerCredit, minPurchaseUsdCents } = await getSettings();
 
   const ledger = await db
     .select()
@@ -73,6 +74,13 @@ export default async function CreditsPage({
             </button>
           </form>
         ))}
+      </div>
+
+      <div className="mt-6 max-w-md">
+        <CustomAmount
+          usdCentsPerCredit={usdCentsPerCredit}
+          minPurchaseUsdCents={minPurchaseUsdCents}
+        />
       </div>
 
       <h2 className="mt-12 text-lg font-semibold">Activity</h2>

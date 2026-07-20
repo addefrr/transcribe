@@ -10,7 +10,7 @@ export const metadata = { title: "My transcriptions — Transcribe" };
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const { tiers } = await getSettings();
+  const { tiers, usdCentsPerCredit } = await getSettings();
 
   return (
     <div className="py-10">
@@ -27,7 +27,7 @@ export default async function DashboardPage() {
           </Link>
         </p>
       </div>
-      <NewJobForm tiers={tiers} />
+      <NewJobForm tiers={tiers} usdCentsPerCredit={usdCentsPerCredit} />
       <JobList />
     </div>
   );

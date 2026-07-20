@@ -21,7 +21,13 @@ async function getMediaDuration(file: File): Promise<number | null> {
   });
 }
 
-export default function NewJobForm({ tiers }: { tiers: Record<Tier, TierConfig> }) {
+export default function NewJobForm({
+  tiers,
+  usdCentsPerCredit,
+}: {
+  tiers: Record<Tier, TierConfig>;
+  usdCentsPerCredit: number;
+}) {
   const [mode, setMode] = useState<"upload" | "url">("upload");
   const [tier, setTier] = useState<Tier>("standard");
   const [language, setLanguage] = useState(""); // "" = auto-detect
@@ -218,7 +224,9 @@ export default function NewJobForm({ tiers }: { tiers: Record<Tier, TierConfig> 
         </button>
         {estimate !== null && (
           <span className="text-sm text-zinc-500">
-            About {estimate} credit{estimate > 1 ? "s" : ""} ({Math.ceil(fileDuration! / 60)} min)
+            About {estimate} credit{estimate > 1 ? "s" : ""} (~$
+            {((estimate * usdCentsPerCredit) / 100).toFixed(2)}) ·{" "}
+            {Math.ceil(fileDuration! / 60)} min
           </span>
         )}
         {mode === "url" && (
