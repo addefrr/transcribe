@@ -27,12 +27,12 @@ export default function JobList() {
   }, []);
 
   if (jobs === null) {
-    return <p className="mt-8 text-sm text-zinc-500">Loading jobs…</p>;
+    return <p className="mt-8 text-sm text-zinc-500">Loading…</p>;
   }
   if (jobs.length === 0) {
     return (
       <p className="mt-8 text-sm text-zinc-500">
-        No transcriptions yet — submit one above to get started.
+        Nothing here yet — add a file or link above to create your first transcript.
       </p>
     );
   }
@@ -42,10 +42,10 @@ export default function JobList() {
       <table className="w-full text-left text-sm">
         <thead className="border-b border-zinc-200 text-zinc-500 dark:border-zinc-800">
           <tr>
-            <th className="py-2 pr-4 font-medium">Source</th>
-            <th className="py-2 pr-4 font-medium">Tier</th>
+            <th className="py-2 pr-4 font-medium">Recording</th>
+            <th className="py-2 pr-4 font-medium">Quality</th>
             <th className="py-2 pr-4 font-medium">Length</th>
-            <th className="py-2 pr-4 font-medium">Credits</th>
+            <th className="py-2 pr-4 font-medium">Cost</th>
             <th className="py-2 pr-4 font-medium">Status</th>
             <th className="py-2 font-medium"></th>
           </tr>
@@ -62,9 +62,9 @@ export default function JobList() {
               </td>
               <td className="py-2.5 pr-4">
                 {job.status === "completed"
-                  ? job.creditsCharged
+                  ? `${job.creditsCharged} credits`
                   : job.creditsHeld > 0
-                    ? `${job.creditsHeld} held`
+                    ? `${job.creditsHeld} reserved`
                     : "—"}
               </td>
               <td className="py-2.5 pr-4">

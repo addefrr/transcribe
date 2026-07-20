@@ -9,14 +9,13 @@ export const TIERS = {
   standard: {
     label: "Standard",
     creditsPerMinute: 1,
-    description:
-      "Fast, accurate, great value — Qwen3-ASR for major languages, Whisper large-v3-turbo for the rest.",
+    description: "Great quality at the best price. Ideal for clear recordings, interviews and videos.",
   },
   premium: {
     label: "Premium",
     creditsPerMinute: 2,
     description:
-      "Top accuracy for long recordings, noisy audio and heavy accents — best for meetings & podcasts.",
+      "Our most accurate option. Best for noisy audio, strong accents, meetings and podcasts.",
   },
 } as const;
 

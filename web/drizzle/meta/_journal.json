@@ -15,6 +15,13 @@
       "when": 1784542863161,
       "tag": "0001_add_language_hint",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784544713395,
+      "tag": "0002_add_purchase_amount",
+      "breakpoints": true
     }
   ]
 }

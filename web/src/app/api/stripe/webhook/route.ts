@@ -44,7 +44,10 @@ export async function POST(req: NextRequest) {
     // Idempotent by event id: Stripe retries deliveries, credits apply once.
     // (A paid `completed` and a later `async_payment_succeeded` never both
     // fire for one session, so the two event types can't double-credit.)
-    await grantCredits(userId, credits, "purchase", { stripeEventId: event.id });
+    await grantCredits(userId, credits, "purchase", {
+      stripeEventId: event.id,
+      amountUsdCents: session.amount_total ?? undefined,
+    });
   }
 
   return NextResponse.json({ received: true });

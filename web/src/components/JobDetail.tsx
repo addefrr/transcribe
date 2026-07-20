@@ -59,7 +59,7 @@ export default function JobDetail({ id }: { id: string }) {
   return (
     <div>
       <Link href="/dashboard" className="text-sm text-indigo-600 hover:underline dark:text-indigo-400">
-        ← Back to dashboard
+        ← Back to my transcriptions
       </Link>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <h1 className="max-w-xl truncate text-xl font-semibold" title={source ?? ""}>
@@ -67,40 +67,48 @@ export default function JobDetail({ id }: { id: string }) {
         </h1>
         <StatusBadge status={job.status} />
       </div>
-      <p className="mt-1 text-sm text-zinc-500">
-        {job.tier} tier
+      <p className="mt-1 text-sm text-zinc-500 capitalize">
+        {job.tier}
         {job.durationSeconds ? ` · ${fmt(job.durationSeconds)} long` : ""}
-        {job.language ? ` · language: ${job.language}` : ""}
+        {job.language ? ` · ${job.language}` : ""}
         {job.status === "completed"
-          ? ` · ${job.creditsCharged} credits charged`
+          ? ` · ${job.creditsCharged} credits used`
           : job.creditsHeld > 0
-            ? ` · ${job.creditsHeld} credits held`
+            ? ` · ${job.creditsHeld} credits reserved`
             : ""}
       </p>
 
       {job.status === "failed" && (
         <div className="mt-6 rounded-md bg-red-50 px-4 py-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
-          <p className="font-medium">This job failed — any held credits were refunded.</p>
+          <p className="font-medium">
+            Something went wrong — you weren&apos;t charged, your credits were returned.
+          </p>
           {job.error && <p className="mt-1">{job.error}</p>}
         </div>
       )}
 
       {ACTIVE.has(job.status) && (
         <p className="mt-6 animate-pulse text-sm text-zinc-500">
-          Working on it — this page updates automatically.
+          Transcribing your recording — this page updates on its own.
         </p>
       )}
 
       {job.status === "completed" && transcript && (
         <>
-          <div className="mt-6 flex gap-3">
-            {(["txt", "srt", "vtt"] as const).map((format) => (
+          <div className="mt-6 flex flex-wrap gap-3">
+            {(
+              [
+                ["txt", "Text file"],
+                ["srt", "Subtitles (SRT)"],
+                ["vtt", "Subtitles (VTT)"],
+              ] as const
+            ).map(([format, label]) => (
               <a
                 key={format}
                 href={`/api/jobs/${job.id}/download?format=${format}`}
                 className="rounded-md border border-zinc-300 px-4 py-1.5 text-sm font-medium hover:border-indigo-500 dark:border-zinc-700"
               >
-                Download .{format}
+                ⬇ {label}
               </a>
             ))}
           </div>

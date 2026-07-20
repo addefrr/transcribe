@@ -112,14 +112,14 @@ export default function NewJobForm() {
       onSubmit={submit}
       className="rounded-xl border border-zinc-200 p-6 dark:border-zinc-800"
     >
-      <h2 className="text-lg font-semibold">New transcription</h2>
+      <h2 className="text-lg font-semibold">Start a transcription</h2>
 
       <div className="mt-4 flex gap-2">
         <button type="button" className={tabClass(mode === "upload")} onClick={() => setMode("upload")}>
-          Upload file
+          Upload a file
         </button>
         <button type="button" className={tabClass(mode === "url")} onClick={() => setMode("url")}>
-          From URL
+          Paste a link
         </button>
       </div>
 
@@ -137,7 +137,7 @@ export default function NewJobForm() {
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://www.youtube.com/watch?v=… or a direct media link"
+            placeholder="Paste a YouTube or audio/video link…"
             className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700"
           />
         )}
@@ -185,8 +185,8 @@ export default function NewJobForm() {
           ))}
         </select>
         <span className="mt-1 block text-xs text-zinc-500">
-          Leave on auto unless detection struggles. Picking a language can improve
-          accuracy and, on the Standard tier, routes to the engine best suited to it.
+          Leave this on Auto-detect and we&apos;ll figure it out. If you already know the
+          language, choosing it can improve accuracy.
         </span>
       </label>
 
@@ -196,16 +196,16 @@ export default function NewJobForm() {
           disabled={!!busy}
           className="rounded-md bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
         >
-          {busy ?? "Transcribe"}
+          {busy ?? "Start transcription"}
         </button>
         {estimate !== null && (
           <span className="text-sm text-zinc-500">
-            ≈ {estimate} credit{estimate > 1 ? "s" : ""} ({Math.ceil(fileDuration! / 60)} min)
+            About {estimate} credit{estimate > 1 ? "s" : ""} ({Math.ceil(fileDuration! / 60)} min)
           </span>
         )}
         {mode === "url" && (
           <span className="text-sm text-zinc-500">
-            Cost is computed from the media’s duration before transcription starts.
+            We&apos;ll work out the cost from the length before we start.
           </span>
         )}
       </div>
@@ -213,7 +213,7 @@ export default function NewJobForm() {
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       {queued && (
         <p className="mt-3 text-sm text-green-600">
-          Job queued! Progress appears in the list below.
+          All set! Your transcription is in progress below.
         </p>
       )}
     </form>

@@ -5,13 +5,13 @@ import { db } from "@/lib/db";
 import { PACKS } from "@/lib/pricing";
 import { creditLedger } from "@/lib/schema";
 
-export const metadata = { title: "Credits — Transcribe" };
+export const metadata = { title: "Your credits — Transcribe" };
 
 const REASON_LABELS: Record<string, string> = {
-  signup_bonus: "Signup bonus",
-  purchase: "Purchase",
-  hold: "Hold for job",
-  refund: "Refund",
+  signup_bonus: "Welcome bonus",
+  purchase: "Credits added",
+  hold: "Used for a transcription",
+  refund: "Unused credits returned",
 };
 
 export default async function CreditsPage({
@@ -32,20 +32,23 @@ export default async function CreditsPage({
 
   return (
     <div className="py-10">
-      <h1 className="text-2xl font-semibold">Credits</h1>
+      <h1 className="text-2xl font-semibold">Your credits</h1>
       <p className="mt-1 text-zinc-500">
-        Balance: <span className="font-semibold text-zinc-900 dark:text-zinc-100">{user.creditBalance}</span>
+        You have{" "}
+        <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+          {user.creditBalance} credits
+        </span>{" "}
+        — about {user.creditBalance} minutes of Standard transcription.
       </p>
 
       {params.success && (
         <p className="mt-4 rounded-md bg-green-100 px-4 py-2 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">
-          Payment received — credits added to your account. (It can take a few seconds
-          for the webhook to land.)
+          Thank you! Your credits have been added. (It can take a few seconds to appear.)
         </p>
       )}
       {params.canceled && (
         <p className="mt-4 rounded-md bg-amber-100 px-4 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          Checkout canceled — no charge was made.
+          No problem — nothing was charged.
         </p>
       )}
 
@@ -71,9 +74,9 @@ export default async function CreditsPage({
         ))}
       </div>
 
-      <h2 className="mt-12 text-lg font-semibold">History</h2>
+      <h2 className="mt-12 text-lg font-semibold">Activity</h2>
       {ledger.length === 0 ? (
-        <p className="mt-2 text-sm text-zinc-500">No activity yet.</p>
+        <p className="mt-2 text-sm text-zinc-500">Nothing here yet.</p>
       ) : (
         <table className="mt-4 w-full max-w-xl text-left text-sm">
           <tbody>

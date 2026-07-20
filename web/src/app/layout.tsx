@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { isAdmin } from "@/lib/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { logout } from "./(auth)/actions";
 import "./globals.css";
@@ -16,9 +17,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Transcribe — pay-as-you-go AI transcription",
+  title: "Transcribe — turn audio & video into text",
   description:
-    "Buy credits, drop in an audio/video file or URL, get accurate Whisper transcripts.",
+    "Upload a file or paste a link and get a clean, accurate transcript in minutes. Pay only for what you use.",
 };
 
 export default async function RootLayout({
@@ -27,6 +28,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const user = await getCurrentUser();
+  const admin = isAdmin(user);
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
@@ -41,13 +43,18 @@ export default async function RootLayout({
                   <Link
                     href="/credits"
                     className="rounded-full border border-zinc-300 px-3 py-1 hover:border-indigo-500 dark:border-zinc-700"
-                    title="Buy credits"
+                    title="Your credits"
                   >
-                    {user.creditBalance} credits
+                    {user.creditBalance} credits left
                   </Link>
                   <Link href="/dashboard" className="hover:underline">
-                    Dashboard
+                    My transcriptions
                   </Link>
+                  {admin && (
+                    <Link href="/developer" className="hover:underline">
+                      Developer
+                    </Link>
+                  )}
                   <form action={logout}>
                     <button className="text-zinc-500 hover:underline" type="submit">
                       Log out
@@ -63,7 +70,7 @@ export default async function RootLayout({
                     href="/signup"
                     className="rounded-md bg-indigo-600 px-3 py-1.5 font-medium text-white hover:bg-indigo-500"
                   >
-                    Sign up
+                    Get started
                   </Link>
                 </>
               )}
@@ -71,6 +78,9 @@ export default async function RootLayout({
           </nav>
         </header>
         <main className="mx-auto max-w-5xl px-4 pb-24">{children}</main>
+        <footer className="border-t border-zinc-200 py-8 text-center text-xs text-zinc-500 dark:border-zinc-800">
+          🎙️ Transcribe · audio &amp; video to text, the easy way
+        </footer>
       </body>
     </html>
   );

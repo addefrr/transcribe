@@ -19,7 +19,9 @@ export async function POST(req: NextRequest) {
   const stripe = getStripe();
   if (!stripe) {
     if (process.env.DEV_FAKE_CHECKOUT === "1") {
-      await grantCredits(user.id, pack.credits, "purchase");
+      await grantCredits(user.id, pack.credits, "purchase", {
+        amountUsdCents: pack.amountUsdCents,
+      });
       return NextResponse.redirect(new URL("/credits?success=1", APP_URL), 303);
     }
     return NextResponse.json(

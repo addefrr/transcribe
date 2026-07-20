@@ -36,6 +36,7 @@ export const creditLedger = pgTable("credit_ledger", {
     .references(() => users.id, { onDelete: "cascade" }),
   delta: integer("delta").notNull(),
   reason: text("reason").notNull(), // signup_bonus | purchase | hold | refund
+  amountUsdCents: integer("amount_usd_cents"), // set on purchases: what the user actually paid
   jobId: uuid("job_id"),
   stripeEventId: text("stripe_event_id").unique(), // idempotency key for webhooks
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

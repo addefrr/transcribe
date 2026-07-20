@@ -4,7 +4,7 @@ import JobList from "@/components/JobList";
 import NewJobForm from "@/components/NewJobForm";
 import { getCurrentUser } from "@/lib/auth";
 
-export const metadata = { title: "Dashboard — Transcribe" };
+export const metadata = { title: "My transcriptions — Transcribe" };
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
@@ -13,11 +13,15 @@ export default async function DashboardPage() {
   return (
     <div className="py-10">
       <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
+        <h1 className="text-2xl font-semibold">My transcriptions</h1>
         <p className="text-sm text-zinc-500">
-          Balance: <span className="font-semibold text-zinc-900 dark:text-zinc-100">{user.creditBalance} credits</span>{" "}
+          You have{" "}
+          <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+            {user.creditBalance} credits
+          </span>{" "}
+          left{" "}
           <Link href="/credits" className="ml-2 text-indigo-600 hover:underline dark:text-indigo-400">
-            Buy more
+            Get more
           </Link>
         </p>
       </div>
