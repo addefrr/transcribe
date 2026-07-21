@@ -1,26 +1,62 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* Class-based dark mode: the theme toggle adds/removes `.dark` on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
 
+/* Semantic design tokens — an editorial, near-monochrome system with one
+   restrained accent. Utilities resolve these vars, so they theme automatically:
+   bg-paper, bg-paper-2, text-ink, text-muted, border-line, bg-brand, text-brand. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --paper: #ffffff;
+  --paper-2: #f7f7f8;
+  --ink: #0a0a0b;
+  --muted: #66666f;
+  --line: #e7e7ea;
+  --brand: #5b50e0;
+  --brand-ink: #ffffff;
+}
+
+.dark {
+  --paper: #0a0a0b;
+  --paper-2: #141417;
+  --ink: #f3f3f5;
+  --muted: #9c9ca6;
+  --line: #262629;
+  --brand: #8b82ff;
+  --brand-ink: #0a0a0b;
+}
+
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+/* Thin, restrained scrollbar in dark. */
+* {
+  scrollbar-color: var(--line) transparent;
 }

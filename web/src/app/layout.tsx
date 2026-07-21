@@ -1,20 +1,15 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import SiteHeader from "@/components/SiteHeader";
+import { themeInitScript } from "@/components/ThemeToggle";
 import { isAdmin } from "@/lib/admin";
 import { getCurrentUser } from "@/lib/auth";
-import { logout } from "./(auth)/actions";
+import { getActiveSubscription } from "@/lib/subscriptions";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Transcribe — turn audio & video into text",
@@ -29,60 +24,37 @@ export default async function RootLayout({
 }>) {
   const user = await getCurrentUser();
   const admin = isAdmin(user);
+  const sub = user ? await getActiveSubscription(user.id) : null;
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <header className="border-b border-zinc-200 dark:border-zinc-800">
-          <nav className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-            <Link href={user ? "/dashboard" : "/"} className="text-lg font-semibold">
-              🎙️ Transcribe
-            </Link>
-            <div className="flex items-center gap-4 text-sm">
-              {user ? (
-                <>
-                  <Link
-                    href="/credits"
-                    className="rounded-full border border-zinc-300 px-3 py-1 hover:border-indigo-500 dark:border-zinc-700"
-                    title="Your credits"
-                  >
-                    {user.creditBalance} credits left
-                  </Link>
-                  <Link href="/plans" className="hover:underline">
-                    Plans
-                  </Link>
-                  <Link href="/dashboard" className="hover:underline">
-                    My transcriptions
-                  </Link>
-                  {admin && (
-                    <Link href="/developer" className="hover:underline">
-                      Developer
-                    </Link>
-                  )}
-                  <form action={logout}>
-                    <button className="text-zinc-500 hover:underline" type="submit">
-                      Log out
-                    </button>
-                  </form>
-                </>
-              ) : (
-                <>
-                  <Link href="/login" className="hover:underline">
-                    Log in
-                  </Link>
-                  <Link
-                    href="/signup"
-                    className="rounded-md bg-indigo-600 px-3 py-1.5 font-medium text-white hover:bg-indigo-500"
-                  >
-                    Get started
-                  </Link>
-                </>
-              )}
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
+      <body className={`${geistSans.variable} ${geistMono.variable} font-sans`}>
+        <SiteHeader
+          loggedIn={!!user}
+          creditBalance={user?.creditBalance ?? 0}
+          admin={admin}
+          hasSubscription={!!sub}
+        />
+        <main className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">{children}</main>
+        <footer className="border-t border-line">
+          <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-8 text-sm text-muted sm:flex-row sm:px-6">
+            <span className="flex items-center gap-2">
+              <span className="grid h-5 w-5 place-items-center rounded bg-ink text-[10px] text-paper">
+                T
+              </span>
+              Transcribe — audio &amp; video to text
+            </span>
+            <div className="flex gap-5">
+              <Link href="/plans" className="transition hover:text-ink">
+                Plans
+              </Link>
+              <Link href="/login" className="transition hover:text-ink">
+                Log in
+              </Link>
             </div>
-          </nav>
-        </header>
-        <main className="mx-auto max-w-5xl px-4 pb-24">{children}</main>
-        <footer className="border-t border-zinc-200 py-8 text-center text-xs text-zinc-500 dark:border-zinc-800">
-          🎙️ Transcribe · audio &amp; video to text, the easy way
+          </div>
         </footer>
       </body>
     </html>
