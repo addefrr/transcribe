@@ -57,8 +57,8 @@ export default function BatchDetail({ id }: { id: string }) {
     setBusy(false);
   }
 
-  if (notFound) return <p className="text-sm text-zinc-500">Playlist not found.</p>;
-  if (!batch) return <p className="text-sm text-zinc-500">Loading…</p>;
+  if (notFound) return <p className="text-sm text-muted">Playlist not found.</p>;
+  if (!batch) return <p className="text-sm text-muted">Loading…</p>;
 
   const items = (batch.items ?? []) as BatchItem[];
   const totalCredits = items.reduce(
@@ -71,7 +71,7 @@ export default function BatchDetail({ id }: { id: string }) {
       <h1 className="text-2xl font-semibold">Playlist</h1>
 
       {batch.status === "expanding" && (
-        <p className="mt-4 animate-pulse text-sm text-zinc-500">
+        <p className="mt-4 animate-pulse text-sm text-muted">
           Reading the playlist and working out the price…
         </p>
       )}
@@ -94,13 +94,13 @@ export default function BatchDetail({ id }: { id: string }) {
 
       {batch.status === "ready" && (
         <>
-          <div className="mt-4 rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
+          <div className="mt-4 rounded-xl border border-line p-6">
             <p className="text-lg font-semibold">
               {batch.videoCount} videos · {fmtDuration(batch.totalSeconds)} total
             </p>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="mt-1 text-sm text-muted">
               Estimated cost:{" "}
-              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+              <span className="font-semibold text-ink">
                 {totalCredits} credits
               </span>{" "}
               ({batch.tier} quality)
@@ -110,17 +110,17 @@ export default function BatchDetail({ id }: { id: string }) {
               type="button"
               onClick={start}
               disabled={busy}
-              className="mt-4 rounded-md bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              className="mt-4 rounded-md bg-brand px-5 py-2 text-sm font-medium text-brand-ink hover:opacity-90 disabled:opacity-50"
             >
               {busy ? "Starting…" : `Transcribe all — ${totalCredits} credits`}
             </button>
           </div>
 
-          <ul className="mt-6 divide-y divide-zinc-100 text-sm dark:divide-zinc-900">
+          <ul className="mt-6 divide-y divide-line text-sm">
             {items.map((it, i) => (
               <li key={i} className="flex items-center justify-between py-2">
                 <span className="max-w-md truncate">{it.title || it.url}</span>
-                <span className="text-zinc-500">
+                <span className="text-muted">
                   {it.duration ? fmtDuration(it.duration) : "—"}
                 </span>
               </li>

@@ -35,9 +35,9 @@ export default async function CreditsPage({
   return (
     <div className="py-10">
       <h1 className="text-2xl font-semibold">Your credits</h1>
-      <p className="mt-1 text-zinc-500">
+      <p className="mt-1 text-muted">
         You have{" "}
-        <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+        <span className="font-semibold text-ink">
           {user.creditBalance} credits
         </span>{" "}
         — about {user.creditBalance} minutes of Standard transcription.
@@ -60,15 +60,15 @@ export default async function CreditsPage({
             key={pack.id}
             action="/api/stripe/checkout"
             method="POST"
-            className="rounded-xl border border-zinc-200 p-6 text-center dark:border-zinc-800"
+            className="rounded-xl border border-line p-6 text-center"
           >
             <input type="hidden" name="packId" value={pack.id} />
             <h3 className="font-semibold">{pack.name}</h3>
             <p className="mt-1 text-3xl font-bold">{pack.credits}</p>
-            <p className="text-sm text-zinc-500">credits</p>
+            <p className="text-sm text-muted">credits</p>
             <button
               type="submit"
-              className="mt-4 w-full rounded-md bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+              className="mt-4 w-full rounded-md bg-brand py-2 text-sm font-medium text-brand-ink hover:opacity-90"
             >
               Buy for ${(pack.amountUsdCents / 100).toFixed(2)}
             </button>
@@ -85,18 +85,18 @@ export default async function CreditsPage({
 
       <h2 className="mt-12 text-lg font-semibold">Activity</h2>
       {ledger.length === 0 ? (
-        <p className="mt-2 text-sm text-zinc-500">Nothing here yet.</p>
+        <p className="mt-2 text-sm text-muted">Nothing here yet.</p>
       ) : (
         <table className="mt-4 w-full max-w-xl text-left text-sm">
           <tbody>
             {ledger.map((row) => (
-              <tr key={row.id} className="border-b border-zinc-100 dark:border-zinc-900">
-                <td className="py-2 pr-4 text-zinc-500">
+              <tr key={row.id} className="border-b border-line">
+                <td className="py-2 pr-4 text-muted">
                   {row.createdAt.toISOString().slice(0, 16).replace("T", " ")}
                 </td>
                 <td className="py-2 pr-4">{REASON_LABELS[row.reason] ?? row.reason}</td>
                 <td
-                  className={`py-2 text-right font-mono ${row.delta >= 0 ? "text-green-600" : "text-zinc-500"}`}
+                  className={`py-2 text-right font-mono ${row.delta >= 0 ? "text-green-600" : "text-muted"}`}
                 >
                   {row.delta > 0 ? `+${row.delta}` : row.delta}
                 </td>

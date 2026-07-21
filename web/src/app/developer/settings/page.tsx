@@ -10,8 +10,8 @@ export const metadata = { title: "Settings — Transcribe" };
 export const dynamic = "force-dynamic";
 
 const field =
-  "w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700";
-const labelCls = "block text-xs text-zinc-500";
+  "w-full rounded-md border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-brand";
+const labelCls = "block text-xs text-muted";
 
 export default async function SettingsPage({
   searchParams,
@@ -27,11 +27,11 @@ export default async function SettingsPage({
     <div className="py-10">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Settings</h1>
-        <Link href="/developer" className="text-sm text-indigo-600 hover:underline dark:text-indigo-400">
+        <Link href="/developer" className="text-sm text-brand hover:underline dark:text-brand">
           ← Back to portal
         </Link>
       </div>
-      <p className="mt-1 text-sm text-zinc-500">
+      <p className="mt-1 text-sm text-muted">
         Changes apply within a few seconds and never affect jobs already in progress.
       </p>
       {saved && (
@@ -43,12 +43,12 @@ export default async function SettingsPage({
       <form action={saveSettings} className="mt-8 space-y-10">
         {/* Quality tiers */}
         <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
             Quality tiers
           </h2>
           <div className="mt-3 grid gap-6 sm:grid-cols-2">
             {TIER_KEYS.map((key) => (
-              <div key={key} className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
+              <div key={key} className="rounded-xl border border-line p-5">
                 <p className="mb-3 font-medium capitalize">{key}</p>
                 <label className={labelCls}>Label</label>
                 <input name={`tier_${key}_label`} defaultValue={s.tiers[key].label} className={field} />
@@ -74,12 +74,12 @@ export default async function SettingsPage({
 
         {/* Credit packs */}
         <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
             Credit packs
           </h2>
           <div className="mt-3 grid gap-6 sm:grid-cols-3">
             {s.packs.map((pack) => (
-              <div key={pack.id} className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
+              <div key={pack.id} className="rounded-xl border border-line p-5">
                 <label className={labelCls}>Name</label>
                 <input name={`pack_${pack.id}_name`} defaultValue={pack.name} className={field} />
                 <label className={`${labelCls} mt-3`}>Credits</label>
@@ -98,7 +98,7 @@ export default async function SettingsPage({
                   defaultValue={pack.amountUsdCents}
                   className={field}
                 />
-                <p className="mt-1 text-xs text-zinc-400">
+                <p className="mt-1 text-xs text-muted">
                   = ${(pack.amountUsdCents / 100).toFixed(2)} today
                 </p>
               </div>
@@ -108,7 +108,7 @@ export default async function SettingsPage({
 
         {/* Credits economics */}
         <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
             Credits &amp; purchases
           </h2>
           <div className="mt-3 grid max-w-2xl gap-6 sm:grid-cols-3">
@@ -132,7 +132,7 @@ export default async function SettingsPage({
                 defaultValue={s.usdCentsPerCredit}
                 className={field}
               />
-              <p className="mt-1 text-xs text-zinc-400">for custom-amount purchases</p>
+              <p className="mt-1 text-xs text-muted">for custom-amount purchases</p>
             </div>
             <div>
               <label className={labelCls}>Minimum purchase (US cents)</label>
@@ -149,7 +149,7 @@ export default async function SettingsPage({
 
         {/* Subscriptions */}
         <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
             Subscriptions
           </h2>
           <label className="mt-3 flex items-center gap-2 text-sm">
@@ -184,14 +184,14 @@ export default async function SettingsPage({
               />
             </div>
           </div>
-          <p className="mt-2 text-xs text-zinc-400">
+          <p className="mt-2 text-xs text-muted">
             Fair-use allowance = plan price × cap% ÷ compute cost. Higher compute cost or lower
             cap = fewer included minutes.
           </p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {s.subscriptionPlans.map((plan) => (
-              <div key={plan.id} className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
-                <p className="text-xs uppercase tracking-wide text-zinc-400">
+              <div key={plan.id} className="rounded-xl border border-line p-5">
+                <p className="text-xs uppercase tracking-wide text-muted">
                   {plan.tier} · {plan.interval}
                 </p>
                 <label className={`${labelCls} mt-2`}>Label</label>
@@ -220,7 +220,7 @@ export default async function SettingsPage({
 
         {/* Spend wallet */}
         <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
             Spend wallet
           </h2>
           <div className="mt-3 max-w-xs">
@@ -233,7 +233,7 @@ export default async function SettingsPage({
               defaultValue={s.walletSpendPct}
               className={field}
             />
-            <p className="mt-1 text-xs text-zinc-400">
+            <p className="mt-1 text-xs text-muted">
               New transcriptions are paused once estimated API spend reaches this share of your
               total revenue.
             </p>
@@ -242,7 +242,7 @@ export default async function SettingsPage({
 
         <button
           type="submit"
-          className="rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-indigo-500"
+          className="rounded-md bg-brand px-6 py-2.5 text-sm font-medium text-brand-ink hover:opacity-90"
         >
           Save changes
         </button>

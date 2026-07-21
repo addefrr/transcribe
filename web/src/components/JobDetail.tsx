@@ -57,8 +57,8 @@ export default function JobDetail({ id }: { id: string }) {
     };
   }, [id]);
 
-  if (notFound) return <p className="text-sm text-zinc-500">Job not found.</p>;
-  if (!data) return <p className="text-sm text-zinc-500">Loading…</p>;
+  if (notFound) return <p className="text-sm text-muted">Job not found.</p>;
+  if (!data) return <p className="text-sm text-muted">Loading…</p>;
 
   const { job, transcript } = data;
   const source =
@@ -67,7 +67,7 @@ export default function JobDetail({ id }: { id: string }) {
 
   return (
     <div>
-      <Link href="/dashboard" className="text-sm text-indigo-600 hover:underline dark:text-indigo-400">
+      <Link href="/dashboard" className="text-sm text-brand hover:underline dark:text-brand">
         ← Back to my transcriptions
       </Link>
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -76,7 +76,7 @@ export default function JobDetail({ id }: { id: string }) {
         </h1>
         <StatusBadge status={job.status} />
       </div>
-      <p className="mt-1 text-sm text-zinc-500 capitalize">
+      <p className="mt-1 text-sm text-muted capitalize">
         {job.tier}
         {job.durationSeconds ? ` · ${fmt(job.durationSeconds)} long` : ""}
         {job.language ? ` · ${job.language}` : ""}
@@ -97,7 +97,7 @@ export default function JobDetail({ id }: { id: string }) {
       )}
 
       {ACTIVE.has(job.status) && (
-        <p className="mt-6 animate-pulse text-sm text-zinc-500">
+        <p className="mt-6 animate-pulse text-sm text-muted">
           Transcribing your recording — this page updates on its own.
         </p>
       )}
@@ -115,7 +115,7 @@ export default function JobDetail({ id }: { id: string }) {
               <a
                 key={format}
                 href={`/api/jobs/${job.id}/download?format=${format}`}
-                className="rounded-md border border-zinc-300 px-4 py-1.5 text-sm font-medium hover:border-indigo-500 dark:border-zinc-700"
+                className="rounded-md border border-line px-4 py-1.5 text-sm font-medium hover:border-brand"
               >
                 ⬇ {label}
               </a>
@@ -130,14 +130,14 @@ export default function JobDetail({ id }: { id: string }) {
               className="mt-6 w-full"
             />
           )}
-          <div className="mt-6 space-y-3 rounded-xl border border-zinc-200 p-6 dark:border-zinc-800">
+          <div className="mt-6 space-y-3 rounded-xl border border-line p-6">
             {transcript.segments.map((seg, i) => {
               const showSpeaker =
                 seg.speaker && seg.speaker !== transcript.segments[i - 1]?.speaker;
               return (
                 <div key={i}>
                   {showSpeaker && (
-                    <p className="mt-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                    <p className="mt-2 text-xs font-semibold text-brand">
                       {seg.speaker}
                     </p>
                   )}
@@ -149,8 +149,8 @@ export default function JobDetail({ id }: { id: string }) {
                       title={job.audioKey ? "Play from here" : undefined}
                       className={`mr-3 select-none font-mono text-xs ${
                         job.audioKey
-                          ? "text-indigo-500 hover:underline"
-                          : "cursor-default text-zinc-400"
+                          ? "text-brand hover:underline"
+                          : "cursor-default text-muted"
                       }`}
                     >
                       {fmt(seg.start)}

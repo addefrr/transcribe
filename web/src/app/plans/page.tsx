@@ -31,7 +31,7 @@ export default async function PlansPage({
     return (
       <div className="py-10">
         <h1 className="text-2xl font-semibold">Plans</h1>
-        <p className="mt-2 text-sm text-zinc-500">Subscriptions aren&apos;t available right now.</p>
+        <p className="mt-2 text-sm text-muted">Subscriptions aren&apos;t available right now.</p>
       </div>
     );
   }
@@ -43,7 +43,7 @@ export default async function PlansPage({
   return (
     <div className="py-10">
       <h1 className="text-2xl font-semibold">Subscribe &amp; save</h1>
-      <p className="mt-1 text-zinc-600 dark:text-zinc-400">
+      <p className="mt-1 text-muted">
         Unlimited transcriptions for a flat price — no counting credits.
       </p>
 
@@ -59,11 +59,11 @@ export default async function PlansPage({
       )}
 
       {sub && activePlan && (
-        <div className="mt-6 rounded-xl border border-indigo-500 bg-indigo-50 p-5 dark:bg-indigo-950/30">
+        <div className="mt-6 rounded-xl border border-brand bg-paper-2 p-5">
           <p className="font-medium">
             Active plan: {activePlan.label}
           </p>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="mt-1 text-sm text-muted">
             {hours(remainingMinutes(sub))} of {hours(sub.allowanceMinutes)} left this period ·
             renews/ends {sub.periodEnd.toISOString().slice(0, 10)}
           </p>
@@ -80,20 +80,20 @@ export default async function PlansPage({
               method="POST"
               className={`flex flex-col rounded-xl border p-6 ${
                 isActive
-                  ? "border-indigo-500 ring-1 ring-indigo-500"
-                  : "border-zinc-200 dark:border-zinc-800"
+                  ? "border-brand ring-1 ring-brand"
+                  : "border-line"
               }`}
             >
               <input type="hidden" name="planId" value={plan.id} />
-              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand">
                 {plan.tier}
               </p>
               <h3 className="mt-1 font-semibold">{plan.label}</h3>
               <p className="mt-2">
                 <span className="text-3xl font-bold">${(plan.priceUsdCents / 100).toFixed(2)}</span>{" "}
-                <span className="text-sm text-zinc-500">{intervalLabel[plan.interval]}</span>
+                <span className="text-sm text-muted">{intervalLabel[plan.interval]}</span>
               </p>
-              <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+              <p className="mt-2 text-sm text-muted">
                 Up to {hours(planAllowanceMinutes(plan, settings))} of audio included.
               </p>
               <button
@@ -104,8 +104,8 @@ export default async function PlansPage({
                 <span
                   className={`block rounded-md py-2 text-center text-sm font-medium ${
                     isActive
-                      ? "bg-zinc-200 text-zinc-500 dark:bg-zinc-800"
-                      : "bg-indigo-600 text-white hover:bg-indigo-500"
+                      ? "bg-paper-2 text-muted"
+                      : "bg-brand text-brand-ink hover:opacity-90"
                   }`}
                 >
                   {isActive ? "Current plan" : "Choose plan"}
@@ -116,9 +116,9 @@ export default async function PlansPage({
         })}
       </div>
 
-      <p className="mt-8 text-sm text-zinc-500">
+      <p className="mt-8 text-sm text-muted">
         Prefer pay-as-you-go?{" "}
-        <a href="/credits" className="text-indigo-600 hover:underline dark:text-indigo-400">
+        <a href="/credits" className="text-brand hover:underline dark:text-brand">
           Buy credits instead
         </a>
         .

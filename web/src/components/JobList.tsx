@@ -27,11 +27,11 @@ export default function JobList() {
   }, []);
 
   if (jobs === null) {
-    return <p className="mt-8 text-sm text-zinc-500">Loading…</p>;
+    return <p className="mt-8 text-sm text-muted">Loading…</p>;
   }
   if (jobs.length === 0) {
     return (
-      <p className="mt-8 text-sm text-zinc-500">
+      <p className="mt-8 text-sm text-muted">
         Nothing here yet — add a file or link above to create your first transcript.
       </p>
     );
@@ -40,7 +40,7 @@ export default function JobList() {
   return (
     <div className="mt-8 overflow-x-auto">
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-zinc-200 text-zinc-500 dark:border-zinc-800">
+        <thead className="border-b border-line text-muted">
           <tr>
             <th className="py-2 pr-4 font-medium">Recording</th>
             <th className="py-2 pr-4 font-medium">Quality</th>
@@ -52,7 +52,7 @@ export default function JobList() {
         </thead>
         <tbody>
           {jobs.map((job) => (
-            <tr key={job.id} className="border-b border-zinc-100 dark:border-zinc-900">
+            <tr key={job.id} className="border-b border-line">
               <td
                 className="max-w-60 truncate py-2.5 pr-4"
                 title={job.outputName ?? job.sourceUrl ?? job.originalFilename ?? ""}
@@ -77,7 +77,7 @@ export default function JobList() {
               <td className="py-2.5">
                 <Link
                   href={`/jobs/${job.id}`}
-                  className="text-indigo-600 hover:underline dark:text-indigo-400"
+                  className="text-brand hover:underline dark:text-brand"
                 >
                   View
                 </Link>

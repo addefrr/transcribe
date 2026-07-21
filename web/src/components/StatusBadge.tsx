@@ -1,5 +1,5 @@
 const STYLES: Record<string, string> = {
-  pending: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  pending: "bg-paper-2 text-muted",
   probing: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
   downloading: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
   transcribing: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",

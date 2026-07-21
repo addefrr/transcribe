@@ -19,20 +19,20 @@ export default async function DashboardPage() {
       <div className="mb-8 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">My transcriptions</h1>
         {sub ? (
-          <p className="text-sm text-zinc-500">
-            <span className="font-semibold capitalize text-zinc-900 dark:text-zinc-100">
+          <p className="text-sm text-muted">
+            <span className="font-semibold capitalize text-ink">
               {sub.tier} plan
             </span>{" "}
             · {Math.round(remainingMinutes(sub) / 60)}h left this period
           </p>
         ) : (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted">
             You have{" "}
-            <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+            <span className="font-semibold text-ink">
               {user.creditBalance} credits
             </span>{" "}
             left{" "}
-            <Link href="/plans" className="ml-2 text-indigo-600 hover:underline dark:text-indigo-400">
+            <Link href="/plans" className="ml-2 text-brand hover:underline dark:text-brand">
               Go unlimited
             </Link>
           </p>

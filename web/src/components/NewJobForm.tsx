@@ -141,14 +141,14 @@ export default function NewJobForm({
   const tabClass = (active: boolean) =>
     `rounded-md px-4 py-2 text-sm font-medium ${
       active
-        ? "bg-indigo-600 text-white"
-        : "border border-zinc-300 text-zinc-600 hover:border-indigo-400 dark:border-zinc-700 dark:text-zinc-300"
+        ? "bg-brand text-brand-ink"
+        : "border border-line text-muted hover:border-brand"
     }`;
 
   return (
     <form
       onSubmit={submit}
-      className="rounded-xl border border-zinc-200 p-6 dark:border-zinc-800"
+      className="rounded-xl border border-line p-6"
     >
       <h2 className="text-lg font-semibold">Start a transcription</h2>
 
@@ -175,7 +175,7 @@ export default function NewJobForm({
             type="file"
             accept="audio/*,video/*"
             onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm file:mr-4 file:rounded-md file:border-0 file:bg-zinc-100 file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-zinc-200 dark:file:bg-zinc-800 dark:hover:file:bg-zinc-700"
+            className="block w-full text-sm file:mr-4 file:rounded-md file:border-0 file:bg-paper-2 file:px-4 file:py-2 file:text-sm file:font-medium hover:file:opacity-90"
           />
         ) : mode === "url" ? (
           <input
@@ -184,7 +184,7 @@ export default function NewJobForm({
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="Paste a YouTube or audio/video link…"
-            className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700"
+            className="w-full rounded-md border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-brand"
           />
         ) : (
           <Recorder onRecorded={onFileChange} />
@@ -198,7 +198,7 @@ export default function NewJobForm({
             />
             <span>
               <span className="font-medium">Transcribe the whole playlist</span>{" "}
-              <span className="text-zinc-500">— we&apos;ll show the total price first</span>
+              <span className="text-muted">— we&apos;ll show the total price first</span>
             </span>
           </label>
         )}
@@ -210,8 +210,8 @@ export default function NewJobForm({
             key={id}
             className={`cursor-pointer rounded-lg border p-4 text-sm ${
               tier === id
-                ? "border-indigo-500 ring-1 ring-indigo-500"
-                : "border-zinc-300 dark:border-zinc-700"
+                ? "border-brand ring-1 ring-brand"
+                : "border-line"
             }`}
           >
             <input
@@ -223,20 +223,20 @@ export default function NewJobForm({
               className="mr-2"
             />
             <span className="font-medium">{t.label}</span>{" "}
-            <span className="text-zinc-500">
+            <span className="text-muted">
               — {t.creditsPerMinute} credit{t.creditsPerMinute > 1 ? "s" : ""}/min
             </span>
-            <p className="mt-1 text-zinc-500">{t.description}</p>
+            <p className="mt-1 text-muted">{t.description}</p>
           </label>
         ))}
       </fieldset>
 
       <label className="mt-5 block">
-        <span className="mb-1 block text-sm text-zinc-600 dark:text-zinc-400">Language</span>
+        <span className="mb-1 block text-sm text-muted">Language</span>
         <select
           value={language}
           onChange={(e) => setLanguage(e.target.value)}
-          className="w-full max-w-xs rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-indigo-500 dark:border-zinc-700"
+          className="w-full max-w-xs rounded-md border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-brand"
         >
           <option value="">Auto-detect (recommended)</option>
           <optgroup label="Best supported">
@@ -256,7 +256,7 @@ export default function NewJobForm({
               ))}
           </optgroup>
         </select>
-        <span className="mt-1 block text-xs text-zinc-500">
+        <span className="mt-1 block text-xs text-muted">
           Leave this on Auto-detect and we&apos;ll figure it out. If you already know the
           language, choosing it can improve accuracy.
         </span>
@@ -274,7 +274,7 @@ export default function NewJobForm({
         />
         <span>
           <span className="font-medium">Recognize speakers</span>{" "}
-          <span className="text-zinc-500">— label who&apos;s talking (uses Premium)</span>
+          <span className="text-muted">— label who&apos;s talking (uses Premium)</span>
         </span>
       </label>
 
@@ -282,19 +282,19 @@ export default function NewJobForm({
         <button
           type="submit"
           disabled={!!busy}
-          className="rounded-md bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+          className="rounded-md bg-brand px-5 py-2 text-sm font-medium text-brand-ink hover:opacity-90 disabled:opacity-50"
         >
           {busy ?? "Start transcription"}
         </button>
         {estimate !== null && (
-          <span className="text-sm text-zinc-500">
+          <span className="text-sm text-muted">
             About {estimate} credit{estimate > 1 ? "s" : ""} (~$
             {((estimate * usdCentsPerCredit) / 100).toFixed(2)}) ·{" "}
             {Math.ceil(fileDuration! / 60)} min
           </span>
         )}
         {mode === "url" && (
-          <span className="text-sm text-zinc-500">
+          <span className="text-sm text-muted">
             We&apos;ll work out the cost from the length before we start.
           </span>
         )}

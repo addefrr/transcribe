@@ -55,13 +55,13 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
   const mmss = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 
   return (
-    <div className="rounded-md border border-zinc-300 p-4 dark:border-zinc-700">
+    <div className="rounded-md border border-line p-4">
       <div className="flex items-center gap-3">
         {recording ? (
           <button
             type="button"
             onClick={stop}
-            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500"
+            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-brand-ink hover:bg-red-500"
           >
             ■ Stop
           </button>
@@ -69,7 +69,7 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
           <button
             type="button"
             onClick={start}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+            className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink hover:opacity-90"
           >
             ● {done ? "Record again" : "Start recording"}
           </button>
