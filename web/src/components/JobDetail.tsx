@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Job, TranscriptSegment } from "@/lib/schema";
+import JobProgress from "./JobProgress";
 import StatusBadge from "./StatusBadge";
 
 type Payload = {
@@ -141,11 +142,7 @@ export default function JobDetail({ id }: { id: string }) {
         </div>
       )}
 
-      {ACTIVE.has(job.status) && (
-        <p className="mt-6 animate-pulse text-sm text-muted">
-          Transcribing your recording — this page updates on its own.
-        </p>
-      )}
+      {ACTIVE.has(job.status) && <JobProgress job={job} />}
 
       {job.status === "completed" && transcript && (
         <>

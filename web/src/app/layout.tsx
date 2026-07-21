@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import JobNotifier from "@/components/JobNotifier";
 import SiteHeader from "@/components/SiteHeader";
 import { themeInitScript } from "@/components/ThemeToggle";
 import { isAdmin } from "@/lib/admin";
@@ -38,6 +39,7 @@ export default async function RootLayout({
           hasSubscription={!!sub}
         />
         <main className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">{children}</main>
+        {user && <JobNotifier />}
         <footer className="border-t border-line">
           <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-8 text-sm text-muted sm:flex-row sm:px-6">
             <span className="flex items-center gap-2">

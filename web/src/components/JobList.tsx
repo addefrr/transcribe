@@ -10,6 +10,7 @@ import {
   type FolderColor,
   MAX_FOLDER_NAME,
 } from "@/lib/folders";
+import { jobProgress } from "@/lib/progress";
 import type { Folder, Job } from "@/lib/schema";
 import StatusBadge from "./StatusBadge";
 
@@ -346,6 +347,17 @@ export default function JobList() {
                   </td>
                   <td className="py-2.5 pr-4">
                     <StatusBadge status={job.status} />
+                    {(() => {
+                      const p = jobProgress(job);
+                      return p.active ? (
+                        <div className="mt-1 h-1 w-20 overflow-hidden rounded-full bg-paper-2">
+                          <div
+                            className="h-full rounded-full bg-brand transition-[width] duration-500"
+                            style={{ width: `${Math.round(p.fraction * 100)}%` }}
+                          />
+                        </div>
+                      ) : null;
+                    })()}
                   </td>
                   <td className="py-2.5">
                     <Link href={`/jobs/${job.id}`} className="text-brand hover:underline">
