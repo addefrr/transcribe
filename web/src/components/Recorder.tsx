@@ -6,12 +6,24 @@ import { useRef, useState } from "react";
 // result back as a File, which the job form then uploads like any other file.
 export default function Recorder({ onRecorded }: { onRecorded: (file: File | null) => void }) {
   const [recording, setRecording] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function startTimer() {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+  }
+  function stopTimer() {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }
 
   async function start() {
     setError(null);
@@ -42,30 +54,37 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
     recorderRef.current = rec;
     rec.start();
     setRecording(true);
+    setPaused(false);
     setSeconds(0);
-    timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+    startTimer();
+  }
+
+  // Pausing keeps the same recording — resuming appends to it — so the whole
+  // thing stops the clock and picks up where it left off, no separate files.
+  function pause() {
+    recorderRef.current?.pause();
+    setPaused(true);
+    stopTimer();
+  }
+  function resume() {
+    recorderRef.current?.resume();
+    setPaused(false);
+    startTimer();
   }
 
   function stop() {
     recorderRef.current?.stop();
     setRecording(false);
-    if (timerRef.current) clearInterval(timerRef.current);
+    setPaused(false);
+    stopTimer();
   }
 
   const mmss = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 
   return (
     <div className="rounded-md border border-line p-4">
-      <div className="flex items-center gap-3">
-        {recording ? (
-          <button
-            type="button"
-            onClick={stop}
-            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-brand-ink hover:bg-red-500"
-          >
-            ■ Stop
-          </button>
-        ) : (
+      <div className="flex flex-wrap items-center gap-3">
+        {!recording && (
           <button
             type="button"
             onClick={start}
@@ -74,9 +93,41 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
             ● {done ? "Record again" : "Start recording"}
           </button>
         )}
+        {recording && !paused && (
+          <button
+            type="button"
+            onClick={pause}
+            className="rounded-md border border-line px-4 py-2 text-sm font-medium hover:border-brand"
+          >
+            ❚❚ Pause
+          </button>
+        )}
+        {recording && paused && (
+          <button
+            type="button"
+            onClick={resume}
+            className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink hover:opacity-90"
+          >
+            ● Resume
+          </button>
+        )}
         {recording && (
-          <span className="flex items-center gap-2 text-sm text-red-600">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-red-600" /> {mmss}
+          <button
+            type="button"
+            onClick={stop}
+            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-brand-ink hover:bg-red-500"
+          >
+            ■ Stop
+          </button>
+        )}
+        {recording && (
+          <span
+            className={`flex items-center gap-2 text-sm ${paused ? "text-muted" : "text-red-600"}`}
+          >
+            <span
+              className={`h-2 w-2 rounded-full bg-red-600 ${paused ? "" : "animate-pulse"}`}
+            />
+            {paused ? `Paused · ${mmss}` : mmss}
           </span>
         )}
         {done && !recording && (

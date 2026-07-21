@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+import re
 import subprocess
 from typing import Optional
 
@@ -115,8 +116,33 @@ def download_url(url: str, workdir: str) -> str:
     return matches[0]
 
 
+_TIME_RE = re.compile(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)")
+
+
+def _measure_by_decode(path: str) -> Optional[float]:
+    """Duration by decoding the whole file — the reliable fallback when the
+    container header has no duration (e.g. browser MediaRecorder WebM/Opus,
+    which is written as a live stream and never gets a finalized duration).
+    Decodes audio only to /dev/null and reads ffmpeg's final `time=` stat."""
+    proc = subprocess.run(
+        ["ffmpeg", "-nostdin", "-v", "error", "-stats", "-i", path, "-vn", "-f", "null", "-"],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return None
+    # ffmpeg rewrites the stats line with \r; the last time= is the total length.
+    matches = _TIME_RE.findall(proc.stderr)
+    if not matches:
+        return None
+    h, m, s = matches[-1]
+    return int(h) * 3600 + int(m) * 60 + float(s)
+
+
 def probe_file(path: str) -> float:
-    """Exact duration in seconds via ffprobe — authoritative for billing."""
+    """Exact duration in seconds — authoritative for billing. Reads the fast
+    container metadata first, then falls back to a full decode for files whose
+    header omits the duration."""
     proc = subprocess.run(
         [
             "ffprobe", "-v", "error",
@@ -128,9 +154,14 @@ def probe_file(path: str) -> float:
     )
     if proc.returncode != 0:
         raise JobError("File is not a readable audio/video file.")
+    duration: Optional[float]
     try:
         duration = float(json.loads(proc.stdout)["format"]["duration"])
     except (KeyError, ValueError, json.JSONDecodeError):
+        duration = None
+    if duration is None or duration <= 0:
+        duration = _measure_by_decode(path)
+    if duration is None:
         raise JobError("Could not determine media duration.")
     if duration <= 0:
         raise JobError("Media has zero duration.")
