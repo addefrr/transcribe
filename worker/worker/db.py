@@ -76,6 +76,61 @@ def set_output_name(conn: psycopg.Connection, job_id: str, name: str) -> None:
     )
 
 
+def set_source_video_id(conn: psycopg.Connection, job_id: str, video_id: str) -> None:
+    conn.execute(
+        "UPDATE jobs SET source_video_id = %s, updated_at = now() WHERE id = %s",
+        (video_id[:300], job_id),
+    )
+
+
+# Small TTL cache so we don't hit the settings table on every job.
+_settings_cache: dict[str, tuple[float, Any]] = {}
+
+
+def get_setting(conn: psycopg.Connection, key: str, default: Any) -> Any:
+    """Read a value from the web app's `settings` table (jsonb), cached ~5s so a
+    dev toggle applies quickly without a query per job. Falls back to `default`."""
+    hit = _settings_cache.get(key)
+    if hit and time.monotonic() - hit[0] < 5.0:
+        return hit[1]
+    try:
+        row = conn.execute("SELECT value FROM settings WHERE key = %s", (key,)).fetchone()
+        value = row["value"] if row is not None else default
+    except Exception:
+        value = default
+    _settings_cache[key] = (time.monotonic(), value)
+    return value
+
+
+def find_reusable_transcript(
+    conn: psycopg.Connection,
+    video_id: str,
+    tier: str,
+    diarize: bool,
+    language_hint: Optional[str],
+) -> Optional[dict[str, Any]]:
+    """Most recent completed transcript for the same platform video produced with
+    the same tier / speaker-labels / language, or None. Cross-user by design —
+    the content is a public platform video."""
+    row = conn.execute(
+        """
+        SELECT t.text, t.segments, j.duration_seconds, j.language, j.audio_key
+        FROM jobs j JOIN transcripts t ON t.job_id = j.id
+        WHERE j.source_video_id = %s
+          AND j.tier = %s
+          AND j.diarize = %s
+          AND j.status = 'completed'
+          AND j.duration_seconds IS NOT NULL
+          AND (%s::text IS NULL AND j.language_hint IS NULL
+               OR j.language_hint = %s)
+        ORDER BY j.created_at DESC
+        LIMIT 1
+        """,
+        (video_id, tier, diarize, language_hint, language_hint),
+    ).fetchone()
+    return row
+
+
 def set_audio(conn: psycopg.Connection, job_id: str, key: str, retention_days: int) -> None:
     conn.execute(
         "UPDATE jobs SET audio_key = %s, audio_expires_at = now() + make_interval(days => %s) "

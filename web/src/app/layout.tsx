@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { ContentProvider } from "@/components/ContentProvider";
 import JobNotifier from "@/components/JobNotifier";
 import SiteHeader from "@/components/SiteHeader";
 import { themeInitScript } from "@/components/ThemeToggle";
 import VerifyBanner from "@/components/VerifyBanner";
 import { isAdmin } from "@/lib/admin";
 import { getCurrentUser } from "@/lib/auth";
+import { getContent } from "@/lib/settings";
 import { getActiveSubscription } from "@/lib/subscriptions";
 import "./globals.css";
 
@@ -27,39 +29,43 @@ export default async function RootLayout({
   const user = await getCurrentUser();
   const admin = isAdmin(user);
   const sub = user ? await getActiveSubscription(user.id) : null;
+  const content = await getContent();
+  const f = content.footer;
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans`}>
-        <SiteHeader
-          loggedIn={!!user}
-          creditBalance={user?.creditBalance ?? 0}
-          admin={admin}
-          hasSubscription={!!sub}
-        />
-        {user && !user.emailVerified && <VerifyBanner />}
-        <main className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">{children}</main>
-        {user && <JobNotifier />}
-        <footer className="border-t border-line">
-          <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-8 text-sm text-muted sm:flex-row sm:px-6">
-            <span className="flex items-center gap-2">
-              <span className="grid h-5 w-5 place-items-center rounded bg-ink text-[10px] text-paper">
-                T
+        <ContentProvider value={content}>
+          <SiteHeader
+            loggedIn={!!user}
+            creditBalance={user?.creditBalance ?? 0}
+            admin={admin}
+            hasSubscription={!!sub}
+          />
+          {user && !user.emailVerified && <VerifyBanner />}
+          <main className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">{children}</main>
+          {user && <JobNotifier />}
+          <footer className="border-t border-line">
+            <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-8 text-sm text-muted sm:flex-row sm:px-6">
+              <span className="flex items-center gap-2">
+                <span className="grid h-5 w-5 place-items-center rounded bg-ink text-[10px] text-paper">
+                  T
+                </span>
+                {f.tagline}
               </span>
-              Transcribe — audio &amp; video to text
-            </span>
-            <div className="flex gap-5">
-              <Link href="/plans" className="transition hover:text-ink">
-                Plans
-              </Link>
-              <Link href="/login" className="transition hover:text-ink">
-                Log in
-              </Link>
+              <div className="flex gap-5">
+                <Link href="/plans" className="transition hover:text-ink">
+                  {f.plans}
+                </Link>
+                <Link href="/login" className="transition hover:text-ink">
+                  {f.logIn}
+                </Link>
+              </div>
             </div>
-          </div>
-        </footer>
+          </footer>
+        </ContentProvider>
       </body>
     </html>
   );

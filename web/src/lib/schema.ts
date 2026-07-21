@@ -70,6 +70,10 @@ export const jobs = pgTable("jobs", {
     .references(() => users.id, { onDelete: "cascade" }),
   sourceType: text("source_type").notNull(), // upload | url
   sourceUrl: text("source_url"),
+  // Canonical "<extractor>:<id>" the worker resolves for platform URLs (e.g.
+  // "youtube:dQw4w9WgXcQ"). Used to reuse an existing transcript for a repeat
+  // video. Null for uploads and unrecognized/generic URLs.
+  sourceVideoId: text("source_video_id"),
   uploadKey: text("upload_key"),
   originalFilename: text("original_filename"),
   // Human-friendly title: upload filename or, for URLs, the video title the
@@ -106,6 +110,7 @@ export const jobs = pgTable("jobs", {
 }, (t) => [
   index("jobs_status_created_idx").on(t.status, t.createdAt), // worker queue poll
   index("jobs_user_created_idx").on(t.userId, t.createdAt),
+  index("jobs_video_reuse_idx").on(t.sourceVideoId, t.tier), // transcript reuse lookup
 ]);
 
 // User-created folders for organizing transcripts. Each has a color tag shown

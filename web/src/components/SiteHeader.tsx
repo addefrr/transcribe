@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { logout } from "@/app/(auth)/actions";
+import { useContent } from "./ContentProvider";
 import ThemeToggle from "./ThemeToggle";
 
 type Props = {
@@ -16,12 +17,14 @@ type Props = {
 export default function SiteHeader({ loggedIn, creditBalance, admin, hasSubscription }: Props) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const t = useContent().nav;
 
+  const creditPill = hasSubscription ? t.subscribed : `${creditBalance} ${t.creditsLabel}`;
   const links = loggedIn
     ? [
-        { href: "/dashboard", label: "My transcriptions" },
-        { href: "/plans", label: "Plans" },
-        ...(admin ? [{ href: "/developer", label: "Developer" }] : []),
+        { href: "/dashboard", label: t.myTranscriptions },
+        { href: "/plans", label: t.plans },
+        ...(admin ? [{ href: "/developer", label: t.developer }] : []),
       ]
     : [];
 
@@ -49,7 +52,7 @@ export default function SiteHeader({ loggedIn, creditBalance, admin, hasSubscrip
           <span className="grid h-7 w-7 place-items-center rounded-md bg-ink text-[13px] text-paper">
             T
           </span>
-          Transcribe
+          {t.brand}
         </Link>
 
         {/* Desktop nav */}
@@ -61,26 +64,26 @@ export default function SiteHeader({ loggedIn, creditBalance, admin, hasSubscrip
                 href="/credits"
                 className="rounded-full border border-line px-3 py-1 text-sm text-muted transition hover:text-ink"
               >
-                {hasSubscription ? "Subscribed" : `${creditBalance} credits`}
+                {creditPill}
               </Link>
               <ThemeToggle />
               <form action={logout}>
                 <button type="submit" className="text-sm text-muted transition hover:text-ink">
-                  Log out
+                  {t.logOut}
                 </button>
               </form>
             </>
           ) : (
             <>
               <Link href="/login" className="text-sm text-muted transition hover:text-ink">
-                Log in
+                {t.logIn}
               </Link>
               <ThemeToggle />
               <Link
                 href="/signup"
                 className="rounded-lg bg-ink px-3.5 py-2 text-sm font-medium text-paper transition hover:opacity-90"
               >
-                Get started
+                {t.getStarted}
               </Link>
             </>
           )}
@@ -109,22 +112,22 @@ export default function SiteHeader({ loggedIn, creditBalance, admin, hasSubscrip
             {links.map((l) => navLink(l.href, l.label))}
             {loggedIn ? (
               <>
-                {navLink("/credits", hasSubscription ? "Subscribed" : `${creditBalance} credits`)}
+                {navLink("/credits", creditPill)}
                 <form action={logout}>
                   <button type="submit" className="text-sm text-muted transition hover:text-ink">
-                    Log out
+                    {t.logOut}
                   </button>
                 </form>
               </>
             ) : (
               <>
-                {navLink("/login", "Log in")}
+                {navLink("/login", t.logIn)}
                 <Link
                   href="/signup"
                   onClick={() => setOpen(false)}
                   className="w-fit rounded-lg bg-ink px-3.5 py-2 text-sm font-medium text-paper"
                 >
-                  Get started
+                  {t.getStarted}
                 </Link>
               </>
             )}

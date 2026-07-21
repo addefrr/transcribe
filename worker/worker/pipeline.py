@@ -74,6 +74,35 @@ def _cleanup_source(job: dict[str, Any]) -> None:
         storage.delete_key(job["upload_key"])
 
 
+def _reuse(
+    conn: psycopg.Connection,
+    job: dict[str, Any],
+    video_id: str,
+    cached: dict[str, Any],
+    on_subscription: bool,
+) -> None:
+    """Complete a job by copying an existing transcript for the same video."""
+    duration = float(cached["duration_seconds"])
+    # Give the reused job its own playback audio if the source's is still around.
+    if config.AUDIO_RETENTION_DAYS > 0 and cached.get("audio_key"):
+        try:
+            key = f"audio/{job['id']}.ogg"
+            if storage.copy_key(cached["audio_key"], key):
+                db.set_audio(conn, job["id"], key, config.AUDIO_RETENTION_DAYS)
+        except Exception:
+            log.warning("could not copy reused audio for job %s", job["id"], exc_info=True)
+    db.set_status(conn, job["id"], "transcribing")
+    if on_subscription:
+        db.complete_job_subscription(
+            conn, job, duration, cached["text"], cached["segments"], cached.get("language")
+        )
+    else:
+        db.complete_job(
+            conn, job, duration, cached["text"], cached["segments"], cached.get("language")
+        )
+    log.info("job %s reused transcript for %s (%.0fs)", job["id"], video_id, duration)
+
+
 def _check_duration(duration: float) -> None:
     if duration > config.MAX_DURATION_SECONDS:
         raise JobError(
@@ -97,12 +126,15 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
     #    Direct file URLs expose no duration metadata, so for those the hold
     #    happens right after the (size-capped) download instead.
     src = None
+    video_id = None
     if job["source_type"] == "url":
         ssrf.check_url(job["source_url"])
-        est_duration, title = media.probe_url(job["source_url"])
+        est_duration, title, video_id = media.probe_url(job["source_url"])
         # Give URL jobs a human-friendly name (video title) for display/downloads.
         if title and not job.get("output_name"):
             db.set_output_name(conn, job["id"], title)
+        if video_id:
+            db.set_source_video_id(conn, job["id"], video_id)
     else:
         src = storage.fetch_upload(job["upload_key"], workdir)
         est_duration = media.probe_file(src)
@@ -112,6 +144,19 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
         if not on_subscription:
             held = db.place_hold(conn, job, est_duration)
             log.info("job %s: %.0fs of audio, %d credits held", job["id"], est_duration, held)
+
+    # Reuse: if this exact platform video was already transcribed at the same
+    # tier / speaker-labels / language, copy that transcript instead of paying to
+    # transcribe again. The customer is still charged normally (complete_job bills
+    # the same as a fresh run). Dev can switch this off via the reuseTranscripts
+    # setting to force a fresh transcription while testing.
+    if video_id and est_duration is not None and db.get_setting(conn, "reuseTranscripts", True):
+        cached = db.find_reusable_transcript(
+            conn, video_id, job["tier"], job["diarize"], job.get("language_hint")
+        )
+        if cached:
+            _reuse(conn, job, video_id, cached, on_subscription)
+            return
 
     # 2. Fetch the full media (uploads were already fetched by the probe).
     db.set_status(conn, job["id"], "downloading")

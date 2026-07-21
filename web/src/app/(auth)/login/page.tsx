@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import AuthForm from "@/components/AuthForm";
 import { getCurrentUser } from "@/lib/auth";
+import { getContent } from "@/lib/settings";
 import { login } from "../actions";
 
 export const metadata = { title: "Log in — Transcribe" };
@@ -12,19 +13,16 @@ export default async function LoginPage({
 }) {
   if (await getCurrentUser()) redirect("/dashboard");
   const { reset, verified } = await searchParams;
-  const notice = reset
-    ? "Your password has been updated. Please log in."
-    : verified
-      ? "Your email is verified. Please log in."
-      : undefined;
+  const c = (await getContent()).auth;
+  const notice = reset ? c.resetNotice : verified ? c.verifiedNotice : undefined;
   return (
     <AuthForm
-      title="Welcome back"
-      cta="Log in"
+      title={c.loginTitle}
+      cta={c.loginCta}
       action={login}
-      altText="New here?"
+      altText={c.loginAlt}
       altHref="/signup"
-      altLink="Create an account"
+      altLink={c.loginAltLink}
       forgotHref="/forgot-password"
       notice={notice}
     />

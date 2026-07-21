@@ -3,9 +3,12 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/admin";
+import { type Content, CONTENT_NAMESPACES, DEFAULT_CONTENT } from "@/lib/content";
 import { TIER_KEYS } from "@/lib/pricing";
 import {
+  getContent,
   getSettings,
+  setContent,
   setSetting,
   type Pack,
   type SubscriptionPlan,
@@ -83,6 +86,28 @@ export async function saveSettings(formData: FormData): Promise<void> {
     "walletSpendPct",
     Math.min(100, Math.max(1, num(formData, "walletSpendPct", current.walletSpendPct))),
   );
+
+  // Transcription: reuse toggle.
+  await setSetting("reuseTranscripts", formData.get("reuseTranscripts") === "on");
+
+  // Site text: data-driven — rebuild the content dictionary from one field per
+  // string (content.<namespace>.<key>), falling back to the current value.
+  const currentContent = await getContent();
+  const content = structuredClone(DEFAULT_CONTENT) as unknown as Record<
+    string,
+    Record<string, string>
+  >;
+  for (const ns of CONTENT_NAMESPACES) {
+    for (const key of Object.keys(content[ns])) {
+      const field = `content.${ns}.${key}`;
+      const raw = formData.get(field);
+      content[ns][key] =
+        typeof raw === "string" && raw.length > 0
+          ? raw.slice(0, 2000)
+          : (currentContent as unknown as Record<string, Record<string, string>>)[ns][key];
+    }
+  }
+  await setContent(content as unknown as Content);
 
   redirect("/developer/settings?saved=1");
 }

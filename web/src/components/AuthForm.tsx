@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { useContent } from "@/components/ContentProvider";
 import type { AuthState } from "@/app/(auth)/actions";
 
 type Props = {
@@ -26,6 +27,7 @@ export default function AuthForm({
   forgotHref,
 }: Props) {
   const [state, formAction, pending] = useActionState(action, {});
+  const t = useContent().auth;
   return (
     <div className="mx-auto mt-16 w-full max-w-sm rounded-xl border border-line p-8">
       <h1 className="mb-6 text-2xl font-semibold">{title}</h1>
@@ -36,7 +38,7 @@ export default function AuthForm({
       )}
       <form action={formAction} className="space-y-4">
         <label className="block">
-          <span className="mb-1 block text-sm text-muted">Email</span>
+          <span className="mb-1 block text-sm text-muted">{t.emailLabel}</span>
           <input
             name="email"
             type="email"
@@ -48,11 +50,11 @@ export default function AuthForm({
         <label className="block">
           <span className="mb-1 flex items-center justify-between text-sm text-muted">
             <span>
-              Password <span className="text-muted">(min. 8 characters)</span>
+              {t.passwordLabel} <span className="text-muted">{t.passwordHint}</span>
             </span>
             {forgotHref && (
               <Link href={forgotHref} className="text-brand hover:underline">
-                Forgot?
+                {t.forgot}
               </Link>
             )}
           </span>

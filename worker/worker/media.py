@@ -20,8 +20,10 @@ def _ydl_opts(extra: dict) -> dict:
     }
 
 
-def probe_url(url: str) -> tuple[Optional[float], Optional[str]]:
-    """(duration_seconds, title) from URL metadata only — nothing is downloaded."""
+def probe_url(url: str) -> tuple[Optional[float], Optional[str], Optional[str]]:
+    """(duration_seconds, title, video_id) from URL metadata only — nothing is
+    downloaded. video_id is a canonical "<extractor>:<id>" for platform videos
+    (used to reuse an existing transcript), or None for generic/unknown URLs."""
     import yt_dlp
 
     try:
@@ -36,7 +38,10 @@ def probe_url(url: str) -> tuple[Optional[float], Optional[str]]:
         raise JobError("Playlists are not supported — submit a single video/audio URL.")
     duration = info.get("duration")
     title = info.get("title") or None
-    return (float(duration) if duration else None, title)
+    extractor = (info.get("extractor_key") or info.get("extractor") or "").lower()
+    vid = info.get("id")
+    video_id = f"{extractor}:{vid}" if vid and extractor and extractor != "generic" else None
+    return (float(duration) if duration else None, title, video_id)
 
 
 def expand_playlist(url: str) -> list[dict]:

@@ -1,10 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useContent } from "@/components/ContentProvider";
+import { fill } from "@/lib/content";
 
 // Records mic audio in the browser (MediaRecorder → Opus/WebM) and hands the
 // result back as a File, which the job form then uploads like any other file.
 export default function Recorder({ onRecorded }: { onRecorded: (file: File | null) => void }) {
+  const t = useContent().recorder;
   const [recording, setRecording] = useState(false);
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -33,7 +36,7 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      setError("Couldn't access your microphone. Check your browser permissions.");
+      setError(t.micError);
       return;
     }
     const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
@@ -90,7 +93,7 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
             onClick={start}
             className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink hover:opacity-90"
           >
-            ● {done ? "Record again" : "Start recording"}
+            ● {done ? t.recordAgain : t.start}
           </button>
         )}
         {recording && !paused && (
@@ -99,7 +102,7 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
             onClick={pause}
             className="rounded-md border border-line px-4 py-2 text-sm font-medium hover:border-brand"
           >
-            ❚❚ Pause
+            ❚❚ {t.pause}
           </button>
         )}
         {recording && paused && (
@@ -108,7 +111,7 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
             onClick={resume}
             className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink hover:opacity-90"
           >
-            ● Resume
+            ● {t.resume}
           </button>
         )}
         {recording && (
@@ -117,7 +120,7 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
             onClick={stop}
             className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-brand-ink hover:bg-red-500"
           >
-            ■ Stop
+            ■ {t.stop}
           </button>
         )}
         {recording && (
@@ -127,11 +130,11 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
             <span
               className={`h-2 w-2 rounded-full bg-red-600 ${paused ? "" : "animate-pulse"}`}
             />
-            {paused ? `Paused · ${mmss}` : mmss}
+            {paused ? `${t.paused} · ${mmss}` : mmss}
           </span>
         )}
         {done && !recording && (
-          <span className="text-sm text-green-600">Recorded {mmss} — ready to transcribe.</span>
+          <span className="text-sm text-green-600">{fill(t.ready, { time: mmss })}</span>
         )}
       </div>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}

@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { fill } from "@/lib/content";
 import type { Job, TranscriptSegment } from "@/lib/schema";
+import { useContent } from "./ContentProvider";
 import JobProgress from "./JobProgress";
 import StatusBadge from "./StatusBadge";
 
@@ -27,6 +29,7 @@ export default function JobDetail({ id }: { id: string }) {
   const [sharing, setSharing] = useState(false);
   const [copied, setCopied] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const t = useContent().jobDetail;
 
   function seek(seconds: number) {
     const el = audioRef.current;
@@ -103,7 +106,7 @@ export default function JobDetail({ id }: { id: string }) {
     };
   }, [id]);
 
-  if (notFound) return <p className="text-sm text-muted">Job not found.</p>;
+  if (notFound) return <p className="text-sm text-muted">{t.notFound}</p>;
   if (!data) return <p className="text-sm text-muted">Loading…</p>;
 
   const { job, transcript } = data;
@@ -113,8 +116,8 @@ export default function JobDetail({ id }: { id: string }) {
 
   return (
     <div>
-      <Link href="/dashboard" className="text-sm text-brand hover:underline dark:text-brand">
-        ← Back to my transcriptions
+      <Link href="/dashboard" className="text-sm text-brand hover:underline">
+        {t.back}
       </Link>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <h1 className="max-w-xl truncate text-xl font-semibold" title={source ?? ""}>
@@ -127,17 +130,15 @@ export default function JobDetail({ id }: { id: string }) {
         {job.durationSeconds ? ` · ${fmt(job.durationSeconds)} long` : ""}
         {job.language ? ` · ${job.language}` : ""}
         {job.status === "completed"
-          ? ` · ${job.creditsCharged} credits used`
+          ? ` · ${fill(t.creditsUsed, { credits: job.creditsCharged })}`
           : job.creditsHeld > 0
-            ? ` · ${job.creditsHeld} credits reserved`
+            ? ` · ${fill(t.creditsReserved, { credits: job.creditsHeld })}`
             : ""}
       </p>
 
       {job.status === "failed" && (
         <div className="mt-6 rounded-md bg-red-50 px-4 py-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">
-          <p className="font-medium">
-            Something went wrong — you weren&apos;t charged, your credits were returned.
-          </p>
+          <p className="font-medium">{t.failed}</p>
           {job.error && <p className="mt-1">{job.error}</p>}
         </div>
       )}
@@ -149,9 +150,9 @@ export default function JobDetail({ id }: { id: string }) {
           <div className="mt-6 flex flex-wrap gap-3">
             {(
               [
-                ["txt", "Text file"],
-                ["srt", "Subtitles (SRT)"],
-                ["vtt", "Subtitles (VTT)"],
+                ["txt", t.downloadTxt],
+                ["srt", t.downloadSrt],
+                ["vtt", t.downloadVtt],
               ] as const
             ).map(([format, label]) => (
               <a
@@ -167,11 +168,9 @@ export default function JobDetail({ id }: { id: string }) {
           <div className="mt-6 rounded-xl border border-line p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium">Share this transcript</p>
+                <p className="text-sm font-medium">{t.shareHeading}</p>
                 <p className="text-sm text-muted">
-                  {shareId
-                    ? "Anyone with the link can read it — no account needed."
-                    : "Create a public read-only link you can send to anyone."}
+                  {shareId ? t.shareOnBody : t.shareOffBody}
                 </p>
               </div>
               {shareId ? (
@@ -181,7 +180,7 @@ export default function JobDetail({ id }: { id: string }) {
                   disabled={sharing}
                   className="rounded-md border border-line px-4 py-1.5 text-sm font-medium hover:border-brand disabled:opacity-50"
                 >
-                  Stop sharing
+                  {t.shareStop}
                 </button>
               ) : (
                 <button
@@ -190,7 +189,7 @@ export default function JobDetail({ id }: { id: string }) {
                   disabled={sharing}
                   className="rounded-md bg-brand px-4 py-1.5 text-sm font-medium text-brand-ink hover:opacity-90 disabled:opacity-50"
                 >
-                  {sharing ? "Creating…" : "Create share link"}
+                  {sharing ? "Creating…" : t.shareCreate}
                 </button>
               )}
             </div>
@@ -207,7 +206,7 @@ export default function JobDetail({ id }: { id: string }) {
                   onClick={copyShare}
                   className="rounded-md border border-line px-3 py-1.5 text-sm font-medium hover:border-brand"
                 >
-                  {copied ? "Copied!" : "Copy"}
+                  {copied ? t.shareCopied : t.shareCopy}
                 </button>
                 <a
                   href={shareUrl}
@@ -215,7 +214,7 @@ export default function JobDetail({ id }: { id: string }) {
                   rel="noreferrer"
                   className="text-sm text-brand hover:underline"
                 >
-                  Open
+                  {t.shareOpen}
                 </a>
               </div>
             )}

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
+import { fill } from "@/lib/content";
 import { getCurrentUser } from "@/lib/auth";
-import { getSettings, planAllowanceMinutes } from "@/lib/settings";
+import { getContent, getSettings, planAllowanceMinutes } from "@/lib/settings";
 import { getActiveSubscription, remainingMinutes } from "@/lib/subscriptions";
 
 export const metadata = { title: "Plans — Transcribe" };
@@ -24,6 +25,7 @@ export default async function PlansPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const settings = await getSettings();
+  const c = (await getContent()).plans;
   const sub = await getActiveSubscription(user.id);
   const params = await searchParams;
 
@@ -42,10 +44,8 @@ export default async function PlansPage({
 
   return (
     <div className="py-10">
-      <h1 className="text-2xl font-semibold">Subscribe &amp; save</h1>
-      <p className="mt-1 text-muted">
-        Unlimited transcriptions for a flat price — no counting credits.
-      </p>
+      <h1 className="text-2xl font-semibold">{c.heading}</h1>
+      <p className="mt-1 text-muted">{c.subheading}</p>
 
       {params.subscribed && (
         <p className="mt-4 rounded-md bg-green-100 px-4 py-2 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">
@@ -60,9 +60,7 @@ export default async function PlansPage({
 
       {sub && activePlan && (
         <div className="mt-6 rounded-xl border border-brand bg-paper-2 p-5">
-          <p className="font-medium">
-            Active plan: {activePlan.label}
-          </p>
+          <p className="font-medium">{fill(c.activePlan, { label: activePlan.label })}</p>
           <p className="mt-1 text-sm text-muted">
             {hours(remainingMinutes(sub))} of {hours(sub.allowanceMinutes)} left this period ·
             renews/ends {sub.periodEnd.toISOString().slice(0, 10)}
@@ -94,7 +92,7 @@ export default async function PlansPage({
                 <span className="text-sm text-muted">{intervalLabel[plan.interval]}</span>
               </p>
               <p className="mt-2 text-sm text-muted">
-                Up to {hours(planAllowanceMinutes(plan, settings))} of audio included.
+                {fill(c.audioIncluded, { hours: hours(planAllowanceMinutes(plan, settings)) })}
               </p>
               <button
                 type="submit"
@@ -108,7 +106,7 @@ export default async function PlansPage({
                       : "bg-brand text-brand-ink hover:opacity-90"
                   }`}
                 >
-                  {isActive ? "Current plan" : "Choose plan"}
+                  {isActive ? c.currentPlan : c.choosePlan}
                 </span>
               </button>
             </form>
@@ -117,9 +115,9 @@ export default async function PlansPage({
       </div>
 
       <p className="mt-8 text-sm text-muted">
-        Prefer pay-as-you-go?{" "}
-        <a href="/credits" className="text-brand hover:underline dark:text-brand">
-          Buy credits instead
+        {c.payg}{" "}
+        <a href="/credits" className="text-brand hover:underline">
+          {c.paygLink}
         </a>
         .
       </p>

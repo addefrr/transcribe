@@ -2,16 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/admin";
 import { getCurrentUser } from "@/lib/auth";
-import { TIER_KEYS } from "@/lib/pricing";
-import { getSettings } from "@/lib/settings";
-import { saveSettings } from "./actions";
+import { getContent, getSettings } from "@/lib/settings";
+import SettingsForm from "./SettingsForm";
 
 export const metadata = { title: "Settings — Transcribe" };
 export const dynamic = "force-dynamic";
-
-const field =
-  "w-full rounded-md border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-brand";
-const labelCls = "block text-xs text-muted";
 
 export default async function SettingsPage({
   searchParams,
@@ -21,13 +16,14 @@ export default async function SettingsPage({
   const user = await getCurrentUser();
   if (!isAdmin(user)) redirect("/dashboard");
   const s = await getSettings();
+  const content = await getContent();
   const { saved } = await searchParams;
 
   return (
     <div className="py-10">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Settings</h1>
-        <Link href="/developer" className="text-sm text-brand hover:underline dark:text-brand">
+        <Link href="/developer" className="text-sm text-brand hover:underline">
           ← Back to portal
         </Link>
       </div>
@@ -39,214 +35,7 @@ export default async function SettingsPage({
           Saved.
         </p>
       )}
-
-      <form action={saveSettings} className="mt-8 space-y-10">
-        {/* Quality tiers */}
-        <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-            Quality tiers
-          </h2>
-          <div className="mt-3 grid gap-6 sm:grid-cols-2">
-            {TIER_KEYS.map((key) => (
-              <div key={key} className="rounded-xl border border-line p-5">
-                <p className="mb-3 font-medium capitalize">{key}</p>
-                <label className={labelCls}>Label</label>
-                <input name={`tier_${key}_label`} defaultValue={s.tiers[key].label} className={field} />
-                <label className={`${labelCls} mt-3`}>Credits per minute</label>
-                <input
-                  name={`tier_${key}_cpm`}
-                  type="number"
-                  min={1}
-                  defaultValue={s.tiers[key].creditsPerMinute}
-                  className={field}
-                />
-                <label className={`${labelCls} mt-3`}>Description</label>
-                <textarea
-                  name={`tier_${key}_desc`}
-                  defaultValue={s.tiers[key].description}
-                  rows={3}
-                  className={field}
-                />
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Credit packs */}
-        <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-            Credit packs
-          </h2>
-          <div className="mt-3 grid gap-6 sm:grid-cols-3">
-            {s.packs.map((pack) => (
-              <div key={pack.id} className="rounded-xl border border-line p-5">
-                <label className={labelCls}>Name</label>
-                <input name={`pack_${pack.id}_name`} defaultValue={pack.name} className={field} />
-                <label className={`${labelCls} mt-3`}>Credits</label>
-                <input
-                  name={`pack_${pack.id}_credits`}
-                  type="number"
-                  min={1}
-                  defaultValue={pack.credits}
-                  className={field}
-                />
-                <label className={`${labelCls} mt-3`}>Price (US cents)</label>
-                <input
-                  name={`pack_${pack.id}_cents`}
-                  type="number"
-                  min={50}
-                  defaultValue={pack.amountUsdCents}
-                  className={field}
-                />
-                <p className="mt-1 text-xs text-muted">
-                  = ${(pack.amountUsdCents / 100).toFixed(2)} today
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Credits economics */}
-        <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-            Credits &amp; purchases
-          </h2>
-          <div className="mt-3 grid max-w-2xl gap-6 sm:grid-cols-3">
-            <div>
-              <label className={labelCls}>Signup bonus (credits)</label>
-              <input
-                name="signupBonusCredits"
-                type="number"
-                min={0}
-                defaultValue={s.signupBonusCredits}
-                className={field}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Price per credit (US cents)</label>
-              <input
-                name="usdCentsPerCredit"
-                type="number"
-                min={0.1}
-                step="0.1"
-                defaultValue={s.usdCentsPerCredit}
-                className={field}
-              />
-              <p className="mt-1 text-xs text-muted">for custom-amount purchases</p>
-            </div>
-            <div>
-              <label className={labelCls}>Minimum purchase (US cents)</label>
-              <input
-                name="minPurchaseUsdCents"
-                type="number"
-                min={50}
-                defaultValue={s.minPurchaseUsdCents}
-                className={field}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Subscriptions */}
-        <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-            Subscriptions
-          </h2>
-          <label className="mt-3 flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="subscriptionsEnabled"
-              defaultChecked={s.subscriptionsEnabled}
-            />
-            Offer subscriptions
-          </label>
-          <div className="mt-4 grid max-w-md gap-6 sm:grid-cols-2">
-            <div>
-              <label className={labelCls}>Standard compute cost (¢/min)</label>
-              <input
-                name="cost_standard"
-                type="number"
-                step="0.001"
-                min={0.001}
-                defaultValue={s.costPerMinuteCents.standard}
-                className={field}
-              />
-            </div>
-            <div>
-              <label className={labelCls}>Premium compute cost (¢/min)</label>
-              <input
-                name="cost_premium"
-                type="number"
-                step="0.001"
-                min={0.001}
-                defaultValue={s.costPerMinuteCents.premium}
-                className={field}
-              />
-            </div>
-          </div>
-          <p className="mt-2 text-xs text-muted">
-            Fair-use allowance = plan price × cap% ÷ compute cost. Higher compute cost or lower
-            cap = fewer included minutes.
-          </p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {s.subscriptionPlans.map((plan) => (
-              <div key={plan.id} className="rounded-xl border border-line p-5">
-                <p className="text-xs uppercase tracking-wide text-muted">
-                  {plan.tier} · {plan.interval}
-                </p>
-                <label className={`${labelCls} mt-2`}>Label</label>
-                <input name={`plan_${plan.id}_label`} defaultValue={plan.label} className={field} />
-                <label className={`${labelCls} mt-3`}>Price (US cents)</label>
-                <input
-                  name={`plan_${plan.id}_cents`}
-                  type="number"
-                  min={50}
-                  defaultValue={plan.priceUsdCents}
-                  className={field}
-                />
-                <label className={`${labelCls} mt-3`}>Fair-use cap (% of price)</label>
-                <input
-                  name={`plan_${plan.id}_cap`}
-                  type="number"
-                  min={1}
-                  max={100}
-                  defaultValue={plan.capPct}
-                  className={field}
-                />
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Spend wallet */}
-        <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-            Spend wallet
-          </h2>
-          <div className="mt-3 max-w-xs">
-            <label className={labelCls}>Max spend (% of revenue)</label>
-            <input
-              name="walletSpendPct"
-              type="number"
-              min={1}
-              max={100}
-              defaultValue={s.walletSpendPct}
-              className={field}
-            />
-            <p className="mt-1 text-xs text-muted">
-              New transcriptions are paused once estimated API spend reaches this share of your
-              total revenue.
-            </p>
-          </div>
-        </section>
-
-        <button
-          type="submit"
-          className="rounded-md bg-brand px-6 py-2.5 text-sm font-medium text-brand-ink hover:opacity-90"
-        >
-          Save changes
-        </button>
-      </form>
+      <SettingsForm settings={s} content={content} />
     </div>
   );
 }

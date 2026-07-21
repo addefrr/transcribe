@@ -67,6 +67,30 @@ def persist(path: str, key: str) -> None:
         put_file(path, key)
 
 
+def copy_key(src_key: str, dst_key: str) -> bool:
+    """Copy a stored object to a new key without re-transcoding. Returns False if
+    the source no longer exists (e.g. it expired). Used to give a reused
+    transcript its own playback audio."""
+    if config.STORAGE_DRIVER == "local":
+        src = _safe_local_path(src_key)
+        if not os.path.exists(src):
+            return False
+        dst = _safe_local_path(dst_key)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copyfile(src, dst)
+        return True
+    try:
+        _s3().copy_object(
+            Bucket=config.S3_BUCKET,
+            Key=dst_key,
+            CopySource={"Bucket": config.S3_BUCKET, "Key": src_key},
+        )
+        return True
+    except Exception:
+        log.warning("could not copy stored object %r -> %r", src_key, dst_key, exc_info=True)
+        return False
+
+
 def presign_get(key: str, expires: int = 6 * 3600) -> str:
     return _s3().generate_presigned_url(
         "get_object",

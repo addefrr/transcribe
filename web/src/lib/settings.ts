@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm";
+import { type Content, mergeContent } from "./content";
 import { db } from "./db";
 import type { Pack, TierConfig, TierKey } from "./pricing";
 import { settings as settingsTable } from "./schema";
@@ -32,6 +34,9 @@ export interface Settings {
   subscriptionPlans: SubscriptionPlan[];
   /** Max % of net revenue we allow spending on transcription APIs. */
   walletSpendPct: number;
+  /** Reuse an existing transcript for a repeat platform video (same tier etc.)
+   *  instead of transcribing again. Dev can switch off to force fresh runs. */
+  reuseTranscripts: boolean;
 }
 
 /** Fair-use minute allowance for a plan's period: price × cap% ÷ cost/minute. */
@@ -78,6 +83,7 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: "premium_week", tier: "premium", label: "Premium Week Pass", interval: "week", priceUsdCents: 600, capPct: 50 },
   ],
   walletSpendPct: 80,
+  reuseTranscripts: true,
 };
 
 // Short-TTL cache so hot paths (job submit, every page render) don't hit the DB
@@ -117,4 +123,38 @@ export async function setSetting<K extends keyof Settings>(
       set: { value, updatedAt: new Date() },
     });
   cache = null; // invalidate so the next read reflects the change immediately
+}
+
+// Editable site copy lives under its own "content" settings key and is
+// deep-merged over the code defaults (mergeContent), so new default strings
+// added in code stay present even against an older stored override.
+let contentCache: { at: number; value: Content } | null = null;
+
+export async function getContent(): Promise<Content> {
+  if (contentCache && Date.now() - contentCache.at < CACHE_TTL_MS) return contentCache.value;
+  let overrides: unknown = null;
+  try {
+    const [row] = await db
+      .select()
+      .from(settingsTable)
+      .where(eq(settingsTable.key, "content"))
+      .limit(1);
+    overrides = row?.value ?? null;
+  } catch {
+    // Table missing pre-migration, etc. — fall back to defaults.
+  }
+  const value = mergeContent(overrides);
+  contentCache = { at: Date.now(), value };
+  return value;
+}
+
+export async function setContent(value: Content): Promise<void> {
+  await db
+    .insert(settingsTable)
+    .values({ key: "content", value, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: settingsTable.key,
+      set: { value, updatedAt: new Date() },
+    });
+  contentCache = null;
 }

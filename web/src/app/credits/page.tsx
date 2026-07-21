@@ -1,9 +1,10 @@
 import { desc, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import CustomAmount from "@/components/CustomAmount";
+import { fill } from "@/lib/content";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getSettings } from "@/lib/settings";
+import { getContent, getSettings } from "@/lib/settings";
 import { creditLedger } from "@/lib/schema";
 
 export const metadata = { title: "Your credits — Transcribe" };
@@ -24,6 +25,7 @@ export default async function CreditsPage({
   if (!user) redirect("/login");
   const params = await searchParams;
   const { packs, usdCentsPerCredit, minPurchaseUsdCents } = await getSettings();
+  const c = (await getContent()).credits;
 
   const ledger = await db
     .select()
@@ -34,23 +36,19 @@ export default async function CreditsPage({
 
   return (
     <div className="py-10">
-      <h1 className="text-2xl font-semibold">Your credits</h1>
+      <h1 className="text-2xl font-semibold">{c.heading}</h1>
       <p className="mt-1 text-muted">
-        You have{" "}
-        <span className="font-semibold text-ink">
-          {user.creditBalance} credits
-        </span>{" "}
-        — about {user.creditBalance} minutes of Standard transcription.
+        {fill(c.balance, { credits: user.creditBalance })}
       </p>
 
       {params.success && (
         <p className="mt-4 rounded-md bg-green-100 px-4 py-2 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">
-          Thank you! Your credits have been added. (It can take a few seconds to appear.)
+          {c.successNotice}
         </p>
       )}
       {params.canceled && (
         <p className="mt-4 rounded-md bg-amber-100 px-4 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-          No problem — nothing was charged.
+          {c.canceledNotice}
         </p>
       )}
 
@@ -65,12 +63,12 @@ export default async function CreditsPage({
             <input type="hidden" name="packId" value={pack.id} />
             <h3 className="font-semibold">{pack.name}</h3>
             <p className="mt-1 text-3xl font-bold">{pack.credits}</p>
-            <p className="text-sm text-muted">credits</p>
+            <p className="text-sm text-muted">{c.creditsWord ?? "credits"}</p>
             <button
               type="submit"
               className="mt-4 w-full rounded-md bg-brand py-2 text-sm font-medium text-brand-ink hover:opacity-90"
             >
-              Buy for ${(pack.amountUsdCents / 100).toFixed(2)}
+              {fill(c.buyCta, { dollars: (pack.amountUsdCents / 100).toFixed(2) })}
             </button>
           </form>
         ))}
@@ -83,9 +81,9 @@ export default async function CreditsPage({
         />
       </div>
 
-      <h2 className="mt-12 text-lg font-semibold">Activity</h2>
+      <h2 className="mt-12 text-lg font-semibold">{c.activityHeading}</h2>
       {ledger.length === 0 ? (
-        <p className="mt-2 text-sm text-muted">Nothing here yet.</p>
+        <p className="mt-2 text-sm text-muted">{c.activityEmpty}</p>
       ) : (
         <table className="mt-4 w-full max-w-xl text-left text-sm">
           <tbody>
