@@ -25,6 +25,12 @@ def run() -> None:
                 db.requeue_stale(conn)
                 pipeline.sweep_expired_audio(conn)
                 last_stale_sweep = now
+            # Expand any pending playlist batches first (quick metadata calls).
+            batch = db.claim_batch(conn)
+            if batch is not None:
+                log.info("claimed batch %s", batch["id"])
+                pipeline.process_batch(conn, batch)
+                continue
             job = db.claim_job(conn)
             if job is None:
                 time.sleep(config.POLL_INTERVAL_SECONDS)

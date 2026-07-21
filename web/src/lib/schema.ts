@@ -59,6 +59,7 @@ export const jobs = pgTable("jobs", {
   creditsPerMinute: integer("credits_per_minute").notNull(),
   billing: text("billing").notNull().default("credits"), // credits | subscription
   subscriptionId: uuid("subscription_id"),
+  batchId: uuid("batch_id"), // set for jobs that came from a playlist batch
   diarize: boolean("diarize").notNull().default(false), // label speakers (Premium/AssemblyAI)
   // Estimated API cost: rate snapshotted at submit, actual set at completion.
   costPerMinuteCents: doublePrecision("cost_per_minute_cents").notNull().default(0),
@@ -124,6 +125,37 @@ export const subscriptions = pgTable(
 );
 
 export type Subscription = typeof subscriptions.$inferSelect;
+
+// A playlist submission. The worker expands it (yt-dlp) into `items`, then the
+// user confirms the total price, which creates one job per item (batch_id set).
+export const jobBatches = pgTable(
+  "job_batches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sourceUrl: text("source_url").notNull(),
+    tier: text("tier").notNull(),
+    creditsPerMinute: integer("credits_per_minute").notNull(),
+    costPerMinuteCents: doublePrecision("cost_per_minute_cents").notNull().default(0),
+    languageHint: text("language_hint"),
+    diarize: boolean("diarize").notNull().default(false),
+    // expanding -> ready -> started | failed
+    status: text("status").notNull().default("expanding"),
+    videoCount: integer("video_count").notNull().default(0),
+    totalSeconds: doublePrecision("total_seconds").notNull().default(0),
+    items: jsonb("items").notNull().$type<BatchItem[]>().default([]),
+    error: text("error"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("job_batches_status_idx").on(t.status, t.createdAt)],
+);
+
+export type BatchItem = { url: string; title: string; duration: number | null };
+export type JobBatch = typeof jobBatches.$inferSelect;
 
 export type TranscriptSegment = {
   start: number;

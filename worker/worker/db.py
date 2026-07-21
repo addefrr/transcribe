@@ -84,6 +84,44 @@ def set_audio(conn: psycopg.Connection, job_id: str, key: str, retention_days: i
     )
 
 
+def claim_batch(conn: psycopg.Connection) -> Optional[dict[str, Any]]:
+    """Claim an unexpanded (or stale) playlist batch for expansion."""
+    with conn.transaction():
+        row = conn.execute(
+            """
+            UPDATE job_batches SET claimed_at = now(), updated_at = now()
+            WHERE id = (
+              SELECT id FROM job_batches
+              WHERE status = 'expanding'
+                AND (claimed_at IS NULL OR claimed_at < now() - make_interval(mins => %s))
+              ORDER BY created_at
+              FOR UPDATE SKIP LOCKED
+              LIMIT 1
+            )
+            RETURNING *
+            """,
+            (config.STALE_JOB_MINUTES,),
+        ).fetchone()
+    return row
+
+
+def set_batch_ready(
+    conn: psycopg.Connection, batch_id: str, items: list[dict[str, Any]], total_seconds: float
+) -> None:
+    conn.execute(
+        "UPDATE job_batches SET status = 'ready', items = %s, video_count = %s, "
+        "total_seconds = %s, updated_at = now() WHERE id = %s",
+        (Jsonb(items), len(items), total_seconds, batch_id),
+    )
+
+
+def fail_batch(conn: psycopg.Connection, batch_id: str, error: str) -> None:
+    conn.execute(
+        "UPDATE job_batches SET status = 'failed', error = %s, updated_at = now() WHERE id = %s",
+        (error[:2000], batch_id),
+    )
+
+
 def credits_for(duration_seconds: float, credits_per_minute: int) -> int:
     return max(1, math.ceil(duration_seconds / 60)) * credits_per_minute
 

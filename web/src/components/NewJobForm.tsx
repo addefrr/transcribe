@@ -1,8 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import Recorder from "@/components/Recorder";
 import { LANGUAGES } from "@/lib/languages";
+import { isPlaylistUrl } from "@/lib/playlist";
 import { estimateCredits, type Tier, type TierConfig } from "@/lib/pricing";
 
 async function getMediaDuration(file: File): Promise<number | null> {
@@ -39,7 +41,9 @@ export default function NewJobForm({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [queued, setQueued] = useState(false);
+  const [playlist, setPlaylist] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   function switchMode(m: "upload" | "url" | "record") {
     setMode(m);
@@ -94,6 +98,19 @@ export default function NewJobForm({
         };
       } else {
         if (!url.trim()) throw new Error("Paste a URL first.");
+        // Whole-playlist submissions go through the batch (expand → confirm price).
+        if (playlist && isPlaylistUrl(url.trim())) {
+          setBusy("Reading playlist…");
+          const res = await fetch("/api/batches", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ url: url.trim(), tier, language, diarize }),
+          });
+          if (!res.ok) throw new Error((await res.json()).error ?? "Could not read playlist");
+          const { batchId } = await res.json();
+          router.push(`/batches/${batchId}`);
+          return;
+        }
         body = { sourceType: "url", url: url.trim(), tier, language, diarize };
       }
 
@@ -171,6 +188,19 @@ export default function NewJobForm({
           />
         ) : (
           <Recorder onRecorded={onFileChange} />
+        )}
+        {mode === "url" && isPlaylistUrl(url.trim()) && (
+          <label className="mt-2 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={playlist}
+              onChange={(e) => setPlaylist(e.target.checked)}
+            />
+            <span>
+              <span className="font-medium">Transcribe the whole playlist</span>{" "}
+              <span className="text-zinc-500">— we&apos;ll show the total price first</span>
+            </span>
+          </label>
         )}
       </div>
 

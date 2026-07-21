@@ -154,6 +154,22 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
     log.info("job %s completed (%d segments)", job["id"], len(segments))
 
 
+def process_batch(conn: psycopg.Connection, batch: dict[str, Any]) -> None:
+    """Expand a playlist into its videos so the user can confirm the price."""
+    try:
+        ssrf.check_url(batch["source_url"])
+        items = media.expand_playlist(batch["source_url"])
+        total = sum(it["duration"] or 0 for it in items)
+        db.set_batch_ready(conn, batch["id"], items, total)
+        log.info("batch %s expanded: %d videos", batch["id"], len(items))
+    except JobError as exc:
+        log.warning("batch %s failed: %s", batch["id"], exc)
+        db.fail_batch(conn, batch["id"], str(exc))
+    except Exception:
+        log.exception("batch %s crashed", batch["id"])
+        db.fail_batch(conn, batch["id"], "Could not read the playlist.")
+
+
 def sweep_expired_audio(conn: psycopg.Connection) -> int:
     """Delete retained audio whose retention window has passed."""
     rows = conn.execute(

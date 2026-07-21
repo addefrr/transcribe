@@ -64,6 +64,13 @@
       "when": 1784579627777,
       "tag": "0008_add_audio_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784617879070,
+      "tag": "0009_add_playlists",
+      "breakpoints": true
     }
   ]
 }

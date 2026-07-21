@@ -38,6 +38,51 @@ def probe_url(url: str) -> tuple[Optional[float], Optional[str]]:
     return (float(duration) if duration else None, title)
 
 
+def expand_playlist(url: str) -> list[dict]:
+    """Expand a playlist into [{url, title, duration}] without downloading.
+
+    Uses flat extraction (metadata only), so it's fast even for large playlists.
+    """
+    import yt_dlp
+
+    opts = _ydl_opts({"extract_flat": "in_playlist", "skip_download": True})
+    # This call intends to fetch a playlist, so allow it (base opts set noplaylist).
+    opts["noplaylist"] = False
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except yt_dlp.utils.DownloadError as exc:
+        raise JobError(f"Could not read the playlist: {exc}") from exc
+
+    entries = info.get("entries")
+    if not entries:
+        raise JobError("That playlist is empty or couldn't be read.")
+
+    items: list[dict] = []
+    for entry in entries:
+        if not entry:
+            continue
+        vid_url = entry.get("url") or entry.get("webpage_url")
+        vid_id = entry.get("id")
+        if not vid_url and vid_id:
+            vid_url = f"https://www.youtube.com/watch?v={vid_id}"
+        if not vid_url:
+            continue
+        duration = entry.get("duration")
+        items.append(
+            {
+                "url": vid_url,
+                "title": (entry.get("title") or "").strip()[:300],
+                "duration": float(duration) if duration else None,
+            }
+        )
+        if len(items) >= config.MAX_PLAYLIST_ITEMS:
+            break
+    if not items:
+        raise JobError("That playlist has no playable videos.")
+    return items
+
+
 def _size_cap_hook(progress: dict) -> None:
     # yt-dlp's max_filesize only applies when the server declares a size up
     # front; this hook also aborts unbounded (chunked/streamed) downloads.
