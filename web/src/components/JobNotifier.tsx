@@ -112,14 +112,14 @@ export default function JobNotifier() {
           prev.current.set(j.id, j.status);
         }
         seeded.current = true;
-        if (
+        // Only offer the opt-in while there's work in progress; drop it once
+        // everything has finished so it doesn't linger with nothing to notify.
+        setShowPrompt(
           anyActive &&
-          typeof Notification !== "undefined" &&
-          Notification.permission === "default" &&
-          localStorage.getItem("notifyPromptDismissed") !== "1"
-        ) {
-          setShowPrompt(true);
-        }
+            typeof Notification !== "undefined" &&
+            Notification.permission === "default" &&
+            localStorage.getItem("notifyPromptDismissed") !== "1",
+        );
       } catch {
         /* transient — next tick retries */
       }

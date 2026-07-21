@@ -29,6 +29,12 @@ export function rateLimit(key: string, limit: number, windowMs: number): RateRes
   return { ok: true, retryAfterSec: 0 };
 }
 
+// Clears a key's counter — call after a legitimate success (e.g. a correct
+// login) so occasional failures plus normal usage never lock a real user out.
+export function resetRateLimit(key: string): void {
+  buckets.delete(key);
+}
+
 // Best-effort client IP from proxy headers; falls back to a shared bucket.
 export async function clientIp(): Promise<string> {
   const h = await headers();

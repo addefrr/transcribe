@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { authTokens } from "./schema";
 
@@ -29,12 +29,21 @@ export async function createAuthToken(
 // used.
 export async function consumeAuthToken(token: string, kind: TokenKind): Promise<string | null> {
   if (!token || token.length < 16) return null;
+  // Single atomic UPDATE: only an unused, unexpired token of the right kind is
+  // marked used, and RETURNING yields the userId only if a row actually matched.
+  // This closes the check-then-update race two concurrent requests could hit.
+  const now = new Date();
   const [row] = await db
-    .select()
-    .from(authTokens)
-    .where(and(eq(authTokens.tokenHash, sha256(token)), eq(authTokens.kind, kind)))
-    .limit(1);
-  if (!row || row.usedAt || row.expiresAt < new Date()) return null;
-  await db.update(authTokens).set({ usedAt: new Date() }).where(eq(authTokens.id, row.id));
-  return row.userId;
+    .update(authTokens)
+    .set({ usedAt: now })
+    .where(
+      and(
+        eq(authTokens.tokenHash, sha256(token)),
+        eq(authTokens.kind, kind),
+        isNull(authTokens.usedAt),
+        gt(authTokens.expiresAt, now),
+      ),
+    )
+    .returning({ userId: authTokens.userId });
+  return row?.userId ?? null;
 }

@@ -13,7 +13,7 @@ import {
 import { grantCredits } from "@/lib/credits";
 import { db } from "@/lib/db";
 import { appUrl, emailLayout, sendEmail } from "@/lib/email";
-import { clientIp, rateLimit } from "@/lib/ratelimit";
+import { clientIp, rateLimit, resetRateLimit } from "@/lib/ratelimit";
 import { getSettings } from "@/lib/settings";
 import { sessions, users } from "@/lib/schema";
 import { createAuthToken, consumeAuthToken } from "@/lib/tokens";
@@ -124,6 +124,10 @@ export async function login(_prev: AuthState, formData: FormData): Promise<AuthS
   if (!user || !ok) {
     return { error: "Invalid email or password." };
   }
+  // A correct login clears the throttles so a few earlier typos (or logging in
+  // from several devices) never lock out a legitimate user.
+  resetRateLimit(`login:email:${parsed.data.email}`);
+  resetRateLimit(`login:ip:${ip}`);
   await createSession(user.id);
   redirect("/dashboard");
 }
