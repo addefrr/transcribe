@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font: 13px/1.4 -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+        width: 320px;
+        margin: 0;
+        padding: 14px;
+      }
+      h1 { font-size: 15px; margin: 0 0 10px; }
+      label { display: block; font-size: 11px; color: #666; margin: 8px 0 2px; }
+      input, select {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+      }
+      .row { display: flex; gap: 8px; }
+      .row > * { flex: 1; }
+      button {
+        width: 100%;
+        margin-top: 10px;
+        padding: 8px;
+        border: 0;
+        border-radius: 6px;
+        background: #5b50e0;
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.secondary { background: transparent; border: 1px solid #ccc; color: inherit; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      #status { margin-top: 10px; font-size: 12px; color: #444; min-height: 16px; }
+      #status a { color: #5b50e0; }
+      .muted { color: #888; font-size: 11px; }
+      hr { border: 0; border-top: 1px solid #eee; margin: 12px 0; }
+      details summary { cursor: pointer; color: #666; font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <h1>Transcribe</h1>
+
+    <div id="setup" hidden>
+      <p class="muted">Connect your account to get started.</p>
+      <label>API base URL</label>
+      <input id="apiBase" placeholder="http://localhost:3000" />
+      <label>API token</label>
+      <input id="token" type="password" placeholder="sk_…" />
+      <button id="saveSetup">Save</button>
+      <p class="muted" style="margin-top: 8px">
+        Create a token on your account's <b>API tokens</b> page (footer → Extension).
+      </p>
+    </div>
+
+    <div id="main" hidden>
+      <div class="row">
+        <div>
+          <label>Quality</label>
+          <select id="tier">
+            <option value="standard">Standard</option>
+            <option value="premium">Premium</option>
+          </select>
+        </div>
+        <div>
+          <label>Language</label>
+          <select id="language">
+            <option value="">Auto-detect</option>
+          </select>
+        </div>
+      </div>
+
+      <button id="record">● Transcribe this tab's audio</button>
+      <button id="stop" class="secondary" hidden>■ Stop &amp; transcribe</button>
+      <button id="urlJob" class="secondary" hidden>Transcribe the playing media (link)</button>
+
+      <div id="status"></div>
+
+      <hr />
+      <details>
+        <summary>Settings</summary>
+        <label>API base URL</label>
+        <input id="apiBase2" />
+        <label>API token</label>
+        <input id="token2" type="password" placeholder="leave blank to keep" />
+        <button id="save2" class="secondary">Update</button>
+      </details>
+    </div>
+
+    <script src="api.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

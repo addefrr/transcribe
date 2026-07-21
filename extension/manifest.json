@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Transcribe — audio & video to text",
+  "version": "0.1.0",
+  "description": "Transcribe audio or video playing in your browser using your Transcribe account.",
+  "permissions": ["tabCapture", "activeTab", "storage", "offscreen", "tabs", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Transcribe this tab"
+  },
+  "background": { "service_worker": "background.js" },
+  "browser_specific_settings": {
+    "gecko": { "id": "transcribe@addefrr.dev", "strict_min_version": "115.0" }
+  }
+}

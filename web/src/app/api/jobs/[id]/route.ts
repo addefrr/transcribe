@@ -1,13 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getRequestUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { folders, jobs, transcripts } from "@/lib/schema";
 import { isUuid } from "@/lib/uuid";
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const user = await getCurrentUser();
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const user = await getRequestUser(req);
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   const { id } = await ctx.params;

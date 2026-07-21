@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
+import { getRequestUser } from "@/lib/auth";
 import { MAX_FILESIZE_BYTES, prepareUpload } from "@/lib/storage";
 
 const bodySchema = z.object({
@@ -11,7 +11,7 @@ const bodySchema = z.object({
 
 /** Step 1 of an upload: get a key + URL to PUT the file to. */
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getRequestUser(req);
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));

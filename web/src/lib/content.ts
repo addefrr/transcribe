@@ -22,6 +22,7 @@ export const DEFAULT_CONTENT = {
   footer: {
     tagline: "Transcribe — audio & video to text",
     plans: "Plans",
+    extension: "Extension",
     logIn: "Log in",
   },
   landing: {

@@ -38,6 +38,27 @@ export const authTokens = pgTable(
   (t) => [index("auth_tokens_hash_idx").on(t.tokenHash)],
 );
 
+// Long-lived personal access tokens for the browser extension / API. We store
+// only the sha256 of the token; the raw "sk_…" value is shown once at creation
+// and never again, so a DB leak can't be replayed. Bearer-authenticated via
+// getRequestUser().
+export const apiTokens = pgTable(
+  "api_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("api_tokens_user_idx").on(t.userId)],
+);
+
+export type ApiToken = typeof apiTokens.$inferSelect;
+
 // id is the sha256 of the cookie token, so a leaked DB dump can't be replayed.
 export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),

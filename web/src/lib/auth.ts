@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { db } from "./db";
-import { sessions, users, type User } from "./schema";
+import { apiTokens, sessions, users, type User } from "./schema";
 
 const SESSION_COOKIE = "session";
 const SESSION_DAYS = 30;
@@ -50,6 +50,33 @@ export async function getCurrentUser(): Promise<User | null> {
     return null;
   }
   return row.user;
+}
+
+// Resolve the user for an API request. A "Bearer sk_…" header authenticates via
+// a personal access token (used by the browser extension and API clients);
+// otherwise we fall back to the session cookie. Used by the /api routes the
+// extension calls so both cookie and token auth work through one code path.
+export async function getRequestUser(req: Request): Promise<User | null> {
+  const auth = req.headers.get("authorization");
+  if (auth?.startsWith("Bearer ")) {
+    const token = auth.slice(7).trim();
+    if (!token) return null;
+    const rows = await db
+      .select({ user: users, tokenId: apiTokens.id })
+      .from(apiTokens)
+      .innerJoin(users, eq(users.id, apiTokens.userId))
+      .where(eq(apiTokens.tokenHash, sha256(token)))
+      .limit(1);
+    const row = rows[0];
+    if (!row) return null;
+    // Best-effort "last used" stamp; never block the request on it.
+    db.update(apiTokens)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(apiTokens.id, row.tokenId))
+      .catch(() => {});
+    return row.user;
+  }
+  return getCurrentUser();
 }
 
 export async function destroySession(): Promise<void> {

@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getCurrentUser } from "@/lib/auth";
+import { getRequestUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isLanguageCode } from "@/lib/languages";
 import { isTier } from "@/lib/pricing";
@@ -38,7 +38,7 @@ const bodySchema = z.discriminatedUnion("sourceType", [
 ]);
 
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getRequestUser(req);
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
@@ -129,8 +129,8 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ job }, { status: 201 });
 }
 
-export async function GET() {
-  const user = await getCurrentUser();
+export async function GET(req: NextRequest) {
+  const user = await getRequestUser(req);
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   const rows = await db
     .select()

@@ -59,6 +59,9 @@ export default async function RootLayout({
                 <Link href="/plans" className="transition hover:text-ink">
                   {f.plans}
                 </Link>
+                <Link href="/tokens" className="transition hover:text-ink">
+                  {f.extension}
+                </Link>
                 <Link href="/login" className="transition hover:text-ink">
                   {f.logIn}
                 </Link>
