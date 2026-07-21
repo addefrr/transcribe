@@ -60,6 +60,7 @@ export const jobs = pgTable("jobs", {
   billing: text("billing").notNull().default("credits"), // credits | subscription
   subscriptionId: uuid("subscription_id"),
   batchId: uuid("batch_id"), // set for jobs that came from a playlist batch
+  folderId: uuid("folder_id"), // optional: user-created folder this transcript is filed under
   diarize: boolean("diarize").notNull().default(false), // label speakers (Premium/AssemblyAI)
   // Estimated API cost: rate snapshotted at submit, actual set at completion.
   costPerMinuteCents: doublePrecision("cost_per_minute_cents").notNull().default(0),
@@ -83,6 +84,25 @@ export const jobs = pgTable("jobs", {
   index("jobs_status_created_idx").on(t.status, t.createdAt), // worker queue poll
   index("jobs_user_created_idx").on(t.userId, t.createdAt),
 ]);
+
+// User-created folders for organizing transcripts. Each has a color tag shown
+// as a dot in the dashboard. Deleting a folder un-files its jobs (folder_id set
+// to null) rather than deleting them.
+export const folders = pgTable(
+  "folders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: text("color").notNull().default("slate"), // a FolderColor key
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("folders_user_idx").on(t.userId, t.createdAt)],
+);
+
+export type Folder = typeof folders.$inferSelect;
 
 export const transcripts = pgTable("transcripts", {
   jobId: uuid("job_id")
