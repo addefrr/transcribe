@@ -37,16 +37,25 @@ def run() -> None:
                 continue
             log.info("claimed job %s (%s, tier=%s)", job["id"], job["source_type"], job["tier"])
             pipeline.process_job(conn, job)
-        except psycopg.OperationalError as exc:
-            log.warning("database connection lost (%s); reconnecting", exc)
+        except KeyboardInterrupt:
+            log.info("worker stopping")
+            return
+        except psycopg.Error as exc:
+            # Any database error — a dropped connection, a restart, or a stale
+            # prepared-statement plan after a migration ("cached plan must not
+            # change result type") — is recovered by reconnecting rather than
+            # crashing the worker. Stuck jobs are picked back up by requeue_stale.
+            log.warning("database error (%s); reconnecting", exc)
             try:
                 conn.close()
             except Exception:
                 pass
+            time.sleep(1)
             conn = db.connect()
-        except KeyboardInterrupt:
-            log.info("worker stopping")
-            return
+        except Exception:
+            # Never let an unexpected error kill the poll loop; back off briefly.
+            log.exception("unexpected error in worker loop; continuing")
+            time.sleep(config.POLL_INTERVAL_SECONDS)
 
 
 if __name__ == "__main__":
