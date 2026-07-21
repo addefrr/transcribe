@@ -11,9 +11,12 @@ export const MAX_FILESIZE_BYTES = Number(
   process.env.MAX_FILESIZE_BYTES ?? 2 * 1024 * 1024 * 1024,
 );
 
-const UPLOAD_DIR = path.resolve(
-  process.env.UPLOAD_DIR ?? path.join(process.cwd(), "..", "data", "uploads"),
-);
+// The web app (cwd = web/) and the worker (cwd = worker/) both read this
+// directory, so a relative UPLOAD_DIR must resolve to the same place for both.
+// Anchor it to the repo root — never the process cwd — so the two always agree.
+// (Next.js runs with cwd = the web project dir, so its parent is the repo root.)
+const REPO_ROOT = path.resolve(process.cwd(), "..");
+const UPLOAD_DIR = path.resolve(REPO_ROOT, process.env.UPLOAD_DIR ?? "data/uploads");
 
 // Keys are minted server-side: "<uuid>.<ext>". Anything else is rejected.
 const KEY_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.[a-z0-9]{1,10})?$/;

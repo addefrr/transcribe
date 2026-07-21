@@ -14,7 +14,11 @@ DATABASE_URL = os.environ.get(
 # local workdir directly, so "local" is fine even in production; "s3" is only
 # needed when the web app and worker run on different machines.
 STORAGE_DRIVER = os.environ.get("STORAGE_DRIVER", "local")  # local | s3
-UPLOAD_DIR = os.environ.get("UPLOAD_DIR", _repo_default("data", "uploads"))
+# Shared with the web app. A relative UPLOAD_DIR is resolved against the repo
+# root (not the process cwd) so the web service (cwd=web/) and this worker
+# (cwd=worker/) always agree on where uploads live; absolute paths pass through.
+_upload_env = os.environ.get("UPLOAD_DIR")
+UPLOAD_DIR = os.path.join(_repo_default(), _upload_env) if _upload_env else _repo_default("data", "uploads")
 S3_ENDPOINT = os.environ.get("S3_ENDPOINT", "")
 S3_REGION = os.environ.get("S3_REGION", "auto")
 S3_BUCKET = os.environ.get("S3_BUCKET", "transcribe")
