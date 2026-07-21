@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useContent } from "@/components/ContentProvider";
 import { fill } from "@/lib/content";
 
@@ -16,6 +16,26 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // If we unmount mid-recording (e.g. the user switches away from the Record
+  // tab), stop the mic and the clock so the microphone doesn't stay live in the
+  // background and the interval doesn't leak. Null onstop first so an abandoned
+  // recording isn't handed back as a file.
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      const rec = recorderRef.current;
+      if (rec) {
+        rec.onstop = null;
+        try {
+          if (rec.state !== "inactive") rec.stop();
+        } catch {
+          /* already stopping */
+        }
+        rec.stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
 
   function startTimer() {
     if (timerRef.current) clearInterval(timerRef.current);

@@ -14,10 +14,13 @@ const YTDLP_BIN = process.env.YTDLP_BIN || "yt-dlp";
 
 type Probe = { durationSeconds: number | null; title: string | null; videoId: string | null };
 
-// url|tier|diarize|language -> result, briefly, so we don't re-spawn yt-dlp on
-// every keystroke or tier toggle.
+// url -> probed length/title, briefly, so we don't re-spawn yt-dlp on every
+// keystroke or tier toggle (the probe itself doesn't depend on tier/language;
+// the reuse "cached" flag is recomputed each request). Bounded so distinct URLs
+// can't grow the map without limit.
 const cache = new Map<string, { at: number; probe: Probe }>();
 const CACHE_TTL = 60_000;
+const CACHE_MAX = 500;
 
 async function probeUrl(url: string): Promise<Probe> {
   try {
@@ -81,7 +84,10 @@ export async function GET(req: NextRequest) {
   const key = url;
   const hit = cache.get(key);
   const probe = hit && Date.now() - hit.at < CACHE_TTL ? hit.probe : await probeUrl(url);
-  if (!hit || Date.now() - hit.at >= CACHE_TTL) cache.set(key, { at: Date.now(), probe });
+  if (!hit || Date.now() - hit.at >= CACHE_TTL) {
+    if (cache.size >= CACHE_MAX) cache.clear();
+    cache.set(key, { at: Date.now(), probe });
+  }
 
   // Speaker labels force Premium, matching the submit path — so the reuse cache
   // key uses the effective tier.

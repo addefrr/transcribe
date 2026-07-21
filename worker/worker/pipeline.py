@@ -92,13 +92,17 @@ def _reuse(
         except Exception:
             log.warning("could not copy reused audio for job %s", job["id"], exc_info=True)
     db.set_status(conn, job["id"], "transcribing")
+    # Reuse copies an existing transcript, so we pay no transcription API cost —
+    # record 0 so the spend wallet and profit figures aren't inflated.
     if on_subscription:
         db.complete_job_subscription(
-            conn, job, duration, cached["text"], cached["segments"], cached.get("language")
+            conn, job, duration, cached["text"], cached["segments"], cached.get("language"),
+            cost_cents=0.0,
         )
     else:
         db.complete_job(
-            conn, job, duration, cached["text"], cached["segments"], cached.get("language")
+            conn, job, duration, cached["text"], cached["segments"], cached.get("language"),
+            cost_cents=0.0,
         )
     log.info("job %s reused transcript for %s (%.0fs)", job["id"], video_id, duration)
 

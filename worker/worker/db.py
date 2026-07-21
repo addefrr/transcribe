@@ -236,9 +236,12 @@ def complete_job(
     text: str,
     segments: list[dict[str, Any]],
     language: Optional[str],
+    cost_cents: Optional[float] = None,
 ) -> None:
     """Store the transcript, charge for actual duration (capped at the hold),
-    refund the rest — one transaction, idempotent per job."""
+    refund the rest — one transaction, idempotent per job. `cost_cents` overrides
+    the estimated API cost recorded for the spend wallet (0 for reused
+    transcripts, which cost us nothing)."""
     with conn.transaction():
         row = conn.execute(
             "SELECT credits_held, credits_charged, status FROM jobs WHERE id = %s FOR UPDATE",
@@ -249,6 +252,7 @@ def complete_job(
         held = row["credits_held"]
         charge = min(credits_for(actual_duration, job["credits_per_minute"]), held)
         _refund(conn, job, held - charge)
+        cost = est_cost_cents(actual_duration, job) if cost_cents is None else cost_cents
         conn.execute(
             """
             INSERT INTO transcripts (job_id, text, segments)
@@ -263,7 +267,7 @@ def complete_job(
                             language = %s, est_cost_cents = %s, error = NULL, updated_at = now()
             WHERE id = %s
             """,
-            (charge, actual_duration, language, est_cost_cents(actual_duration, job), job["id"]),
+            (charge, actual_duration, language, cost, job["id"]),
         )
 
 
@@ -274,9 +278,12 @@ def complete_job_subscription(
     text: str,
     segments: list[dict[str, Any]],
     language: Optional[str],
+    cost_cents: Optional[float] = None,
 ) -> None:
     """Store the transcript and draw the audio minutes from the subscription's
-    allowance instead of charging credits. Idempotent per job."""
+    allowance instead of charging credits. Idempotent per job. `cost_cents`
+    overrides the estimated API cost recorded for the spend wallet (0 for reused
+    transcripts, which cost us nothing)."""
     minutes = max(1, math.ceil(actual_duration / 60))
     with conn.transaction():
         row = conn.execute(
@@ -290,6 +297,7 @@ def complete_job_subscription(
                 "UPDATE subscriptions SET minutes_used = minutes_used + %s WHERE id = %s",
                 (minutes, row["subscription_id"]),
             )
+        cost = est_cost_cents(actual_duration, job) if cost_cents is None else cost_cents
         conn.execute(
             """
             INSERT INTO transcripts (job_id, text, segments)
@@ -304,7 +312,7 @@ def complete_job_subscription(
                             language = %s, est_cost_cents = %s, error = NULL, updated_at = now()
             WHERE id = %s
             """,
-            (actual_duration, language, est_cost_cents(actual_duration, job), job["id"]),
+            (actual_duration, language, cost, job["id"]),
         )
 
 
