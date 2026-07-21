@@ -21,6 +21,10 @@ function fmt(seconds: number): string {
 export default function JobDetail({ id }: { id: string }) {
   const [data, setData] = useState<Payload | null>(null);
   const [notFound, setNotFound] = useState(false);
+  // undefined = not yet synced from the job; null = private; string = shared.
+  const [shareId, setShareId] = useState<string | null | undefined>(undefined);
+  const [sharing, setSharing] = useState(false);
+  const [copied, setCopied] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   function seek(seconds: number) {
@@ -28,6 +32,45 @@ export default function JobDetail({ id }: { id: string }) {
     if (!el) return;
     el.currentTime = seconds;
     el.play().catch(() => {});
+  }
+
+  async function enableShare() {
+    setSharing(true);
+    try {
+      const res = await fetch(`/api/jobs/${id}/share`, { method: "POST" });
+      if (res.ok) setShareId((await res.json()).shareId);
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function disableShare() {
+    setSharing(true);
+    try {
+      const res = await fetch(`/api/jobs/${id}/share`, { method: "DELETE" });
+      if (res.ok) {
+        setShareId(null);
+        setCopied(false);
+      }
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  const shareUrl =
+    shareId && typeof window !== "undefined"
+      ? `${window.location.origin}/share/${shareId}`
+      : "";
+
+  async function copyShare() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — the URL is selectable in the field */
+    }
   }
 
   useEffect(() => {
@@ -44,6 +87,8 @@ export default function JobDetail({ id }: { id: string }) {
         const payload: Payload = await res.json();
         if (stop) return;
         setData(payload);
+        // Seed the share state once from the job; toggles own it afterward.
+        setShareId((prev) => (prev === undefined ? payload.job.shareId : prev));
         if (!ACTIVE.has(payload.job.status)) clearInterval(timer);
       } catch {
         /* retry on next tick */
@@ -120,6 +165,63 @@ export default function JobDetail({ id }: { id: string }) {
                 ⬇ {label}
               </a>
             ))}
+          </div>
+          {/* Public sharing */}
+          <div className="mt-6 rounded-xl border border-line p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Share this transcript</p>
+                <p className="text-sm text-muted">
+                  {shareId
+                    ? "Anyone with the link can read it — no account needed."
+                    : "Create a public read-only link you can send to anyone."}
+                </p>
+              </div>
+              {shareId ? (
+                <button
+                  type="button"
+                  onClick={disableShare}
+                  disabled={sharing}
+                  className="rounded-md border border-line px-4 py-1.5 text-sm font-medium hover:border-brand disabled:opacity-50"
+                >
+                  Stop sharing
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={enableShare}
+                  disabled={sharing}
+                  className="rounded-md bg-brand px-4 py-1.5 text-sm font-medium text-brand-ink hover:opacity-90 disabled:opacity-50"
+                >
+                  {sharing ? "Creating…" : "Create share link"}
+                </button>
+              )}
+            </div>
+            {shareId && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <input
+                  readOnly
+                  value={shareUrl}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="min-w-0 flex-1 rounded-md border border-line bg-paper-2 px-3 py-1.5 font-mono text-xs outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={copyShare}
+                  className="rounded-md border border-line px-3 py-1.5 text-sm font-medium hover:border-brand"
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+                <a
+                  href={shareUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-brand hover:underline"
+                >
+                  Open
+                </a>
+              </div>
+            )}
           </div>
           {job.audioKey && (
             <audio

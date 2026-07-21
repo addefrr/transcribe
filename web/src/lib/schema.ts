@@ -77,6 +77,9 @@ export const jobs = pgTable("jobs", {
   // Retained compressed audio for in-page playback (deleted after it expires).
   audioKey: text("audio_key"),
   audioExpiresAt: timestamp("audio_expires_at", { withTimezone: true }),
+  // Set to a random token when the owner turns on public sharing; the transcript
+  // is then readable at /share/<share_id> without signing in. Null = private.
+  shareId: text("share_id").unique(),
   claimedAt: timestamp("claimed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
