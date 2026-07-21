@@ -4,6 +4,7 @@ import Link from "next/link";
 import JobNotifier from "@/components/JobNotifier";
 import SiteHeader from "@/components/SiteHeader";
 import { themeInitScript } from "@/components/ThemeToggle";
+import VerifyBanner from "@/components/VerifyBanner";
 import { isAdmin } from "@/lib/admin";
 import { getCurrentUser } from "@/lib/auth";
 import { getActiveSubscription } from "@/lib/subscriptions";
@@ -38,6 +39,7 @@ export default async function RootLayout({
           admin={admin}
           hasSubscription={!!sub}
         />
+        {user && !user.emailVerified && <VerifyBanner />}
         <main className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">{children}</main>
         {user && <JobNotifier />}
         <footer className="border-t border-line">

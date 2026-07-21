@@ -14,9 +14,29 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  emailVerified: boolean("email_verified").notNull().default(false),
   creditBalance: integer("credit_balance").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// One-time tokens for email verification and password reset. We store only the
+// sha256 of the token; the raw value lives only in the emailed link, so a DB
+// leak can't be replayed. Rows are single-use (used_at) and time-limited.
+export const authTokens = pgTable(
+  "auth_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // verify | reset
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("auth_tokens_hash_idx").on(t.tokenHash)],
+);
 
 // id is the sha256 of the cookie token, so a leaked DB dump can't be replayed.
 export const sessions = pgTable("sessions", {

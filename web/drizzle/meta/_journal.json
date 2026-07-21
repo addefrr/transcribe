@@ -85,6 +85,13 @@
       "when": 1784620100000,
       "tag": "0011_add_share",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784620200000,
+      "tag": "0012_add_auth_email",
+      "breakpoints": true
     }
   ]
 }
