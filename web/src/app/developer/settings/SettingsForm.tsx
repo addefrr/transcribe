@@ -38,9 +38,12 @@ export default function SettingsForm({
     { id: "subscriptions", label: "Subscriptions" },
     { id: "wallet", label: "Spend wallet" },
     { id: "transcription", label: "Transcription" },
-    ...CONTENT_NAMESPACES.map((ns) => ({ id: `text:${ns}`, label: `Text · ${prettyNs(ns)}` })),
+    { id: "text", label: "Text" },
   ];
   const [active, setActive] = useState(categories[0].id);
+  const [activeText, setActiveText] = useState<(typeof CONTENT_NAMESPACES)[number]>(
+    CONTENT_NAMESPACES[0],
+  );
   const show = (id: string) => (active === id ? "" : "hidden");
 
   // Controlled state for the fair-use preview: our cost ($/hour) + each plan's
@@ -300,32 +303,51 @@ export default function SettingsForm({
           </label>
         </section>
 
-        {/* Site text — one category per content namespace, data-driven */}
-        {CONTENT_NAMESPACES.map((ns) => (
-          <section key={ns} className={show(`text:${ns}`)}>
-            <p className="mb-3 text-xs text-muted">
-              Every user-facing string in this area. {"{placeholders}"} are filled with live values
-              (credit counts, durations) — keep them as-is.
-            </p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {Object.entries(content[ns]).map(([key, val]) => (
-                <div key={key}>
-                  <label className={labelCls}>{key}</label>
-                  {val.length > 60 ? (
-                    <textarea
-                      name={`content.${ns}.${key}`}
-                      defaultValue={val}
-                      rows={3}
-                      className={field}
-                    />
-                  ) : (
-                    <input name={`content.${ns}.${key}`} defaultValue={val} className={field} />
-                  )}
-                </div>
-              ))}
+        {/* Site text — one category, with a subcategory per content namespace */}
+        <section className={show("text")}>
+          <div className="flex flex-wrap gap-1.5 border-b border-line pb-3">
+            {CONTENT_NAMESPACES.map((ns) => (
+              <button
+                key={ns}
+                type="button"
+                onClick={() => setActiveText(ns)}
+                className={`rounded-md px-2.5 py-1 text-xs transition ${
+                  activeText === ns
+                    ? "bg-paper-2 font-medium text-ink"
+                    : "text-muted hover:text-ink"
+                }`}
+              >
+                {prettyNs(ns)}
+              </button>
+            ))}
+          </div>
+          {CONTENT_NAMESPACES.map((ns) => (
+            <div key={ns} className={activeText === ns ? "mt-4" : "hidden"}>
+              <p className="mb-3 text-xs text-muted">
+                Every string in “{prettyNs(ns)}”. {"{placeholders}"} are filled with live values
+                (credit counts, durations) — keep them as-is. You can also edit any string in place
+                from the site using the “Edit text” button.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {Object.entries(content[ns]).map(([key, val]) => (
+                  <div key={key}>
+                    <label className={labelCls}>{key}</label>
+                    {val.length > 60 ? (
+                      <textarea
+                        name={`content.${ns}.${key}`}
+                        defaultValue={val}
+                        rows={3}
+                        className={field}
+                      />
+                    ) : (
+                      <input name={`content.${ns}.${key}`} defaultValue={val} className={field} />
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-          </section>
-        ))}
+          ))}
+        </section>
       </div>
 
       <button

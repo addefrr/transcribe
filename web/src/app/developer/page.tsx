@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { T } from "@/components/T";
 import { getCurrentUser } from "@/lib/auth";
 import { getAdminStats, isAdmin } from "@/lib/admin";
 import { getWallet } from "@/lib/wallet";
@@ -48,12 +49,14 @@ export default async function DeveloperPage() {
   return (
     <div className="py-10">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Developer portal</h1>
+        <h1 className="text-2xl font-semibold">
+          <T id="developer.portalTitle" />
+        </h1>
         <Link
           href="/developer/settings"
           className="rounded-md border border-line px-4 py-1.5 text-sm font-medium hover:border-brand"
         >
-          Settings
+          <T id="developer.settings" />
         </Link>
       </div>
       <p className="mt-1 text-sm text-muted">
@@ -64,7 +67,7 @@ export default async function DeveloperPage() {
 
       {/* Money */}
       <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-muted">
-        Revenue &amp; profit
+        <T id="developer.revenueHeading" />
       </h2>
       <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Revenue" value={usd(s.revenueCents)} sub={`${s.purchaseCount} purchases`} />
@@ -84,7 +87,7 @@ export default async function DeveloperPage() {
 
       {/* Spend wallet */}
       <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-muted">
-        Spend wallet
+        <T id="developer.walletHeading" />
       </h2>
       <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Revenue in wallet" value={usd(wallet.revenueCents)} />
@@ -103,7 +106,7 @@ export default async function DeveloperPage() {
 
       {/* Per-credit economics */}
       <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-muted">
-        Unit economics (per credit sold)
+        <T id="developer.unitHeading" />
       </h2>
       <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Avg. price / credit" value={cents(s.pricePerCredit)} />
@@ -119,7 +122,7 @@ export default async function DeveloperPage() {
 
       {/* Customers & usage */}
       <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-muted">
-        Customers &amp; usage
+        <T id="developer.customersUsageHeading" />
       </h2>
       <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
@@ -145,9 +148,13 @@ export default async function DeveloperPage() {
       </div>
 
       {/* Customer table */}
-      <h2 className="mt-10 text-lg font-semibold">Customers</h2>
+      <h2 className="mt-10 text-lg font-semibold">
+        <T id="developer.customersHeading" />
+      </h2>
       {s.customers.length === 0 ? (
-        <p className="mt-2 text-sm text-muted">No customers yet.</p>
+        <p className="mt-2 text-sm text-muted">
+          <T id="developer.noCustomers" />
+        </p>
       ) : (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-sm">

@@ -37,7 +37,7 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans`}>
-        <ContentProvider value={content}>
+        <ContentProvider value={content} isAdmin={admin}>
           <SiteHeader
             loggedIn={!!user}
             creditBalance={user?.creditBalance ?? 0}
