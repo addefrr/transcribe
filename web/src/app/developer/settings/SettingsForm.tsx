@@ -2,9 +2,18 @@
 
 import { useState } from "react";
 import { CONTENT_NAMESPACES, type Content } from "@/lib/content";
-import { TIER_KEYS } from "@/lib/pricing";
+import {
+  allowanceMinutes,
+  costPerHourUsd,
+  costPerMinuteCentsFromHourUsd,
+  TIER_KEYS,
+} from "@/lib/pricing";
 import type { Settings } from "@/lib/settings";
 import { saveSettings } from "./actions";
+
+function hoursLabel(minutes: number): string {
+  return minutes >= 60 ? `${Math.round(minutes / 60)} hours` : `${minutes} min`;
+}
 
 const field =
   "w-full rounded-md border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-brand";
@@ -33,6 +42,23 @@ export default function SettingsForm({
   ];
   const [active, setActive] = useState(categories[0].id);
   const show = (id: string) => (active === id ? "" : "hidden");
+
+  // Controlled state for the fair-use preview: our cost ($/hour) + each plan's
+  // price/cap. Lets us show "≈ N hours included" live as the admin edits.
+  const [costHour, setCostHour] = useState({
+    standard: costPerHourUsd(s.costPerMinuteCents.standard),
+    premium: costPerHourUsd(s.costPerMinuteCents.premium),
+  });
+  const [planVals, setPlanVals] = useState<Record<string, { price: number; cap: number }>>(
+    Object.fromEntries(
+      s.subscriptionPlans.map((p) => [p.id, { price: p.priceUsdCents, cap: p.capPct }]),
+    ),
+  );
+  const previewHours = (tier: "standard" | "premium", planId: string): string => {
+    const pv = planVals[planId];
+    const mins = allowanceMinutes(pv.price, pv.cap, costPerMinuteCentsFromHourUsd(costHour[tier]));
+    return hoursLabel(mins);
+  };
 
   return (
     <form action={saveSettings} className="mt-6">
@@ -160,31 +186,34 @@ export default function SettingsForm({
           </label>
           <div className="mt-4 grid max-w-md gap-6 sm:grid-cols-2">
             <div>
-              <label className={labelCls}>Standard compute cost (¢/min)</label>
+              <label className={labelCls}>What it costs us — Standard ($/hour of audio)</label>
               <input
                 name="cost_standard"
                 type="number"
                 step="0.001"
-                min={0.001}
-                defaultValue={s.costPerMinuteCents.standard}
+                min={0}
+                value={costHour.standard}
+                onChange={(e) => setCostHour((c) => ({ ...c, standard: Number(e.target.value) }))}
                 className={field}
               />
             </div>
             <div>
-              <label className={labelCls}>Premium compute cost (¢/min)</label>
+              <label className={labelCls}>What it costs us — Premium ($/hour of audio)</label>
               <input
                 name="cost_premium"
                 type="number"
                 step="0.001"
-                min={0.001}
-                defaultValue={s.costPerMinuteCents.premium}
+                min={0}
+                value={costHour.premium}
+                onChange={(e) => setCostHour((c) => ({ ...c, premium: Number(e.target.value) }))}
                 className={field}
               />
             </div>
           </div>
           <p className="mt-2 text-xs text-muted">
-            Fair-use allowance = plan price × cap% ÷ compute cost. Higher compute cost or lower cap =
-            fewer included minutes.
+            Enter your own transcription cost per hour of audio (what providers charge you).
+            Fair-use hours = (plan price ÷ our cost) × cap%. Higher cost or lower cap = fewer
+            included hours.
           </p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {s.subscriptionPlans.map((plan) => (
@@ -199,18 +228,33 @@ export default function SettingsForm({
                   name={`plan_${plan.id}_cents`}
                   type="number"
                   min={50}
-                  defaultValue={plan.priceUsdCents}
+                  value={planVals[plan.id].price}
+                  onChange={(e) =>
+                    setPlanVals((v) => ({
+                      ...v,
+                      [plan.id]: { ...v[plan.id], price: Number(e.target.value) },
+                    }))
+                  }
                   className={field}
                 />
-                <label className={`${labelCls} mt-3`}>Fair-use cap (% of price)</label>
+                <label className={`${labelCls} mt-3`}>Fair-use cap (% of our cost)</label>
                 <input
                   name={`plan_${plan.id}_cap`}
                   type="number"
                   min={1}
                   max={100}
-                  defaultValue={plan.capPct}
+                  value={planVals[plan.id].cap}
+                  onChange={(e) =>
+                    setPlanVals((v) => ({
+                      ...v,
+                      [plan.id]: { ...v[plan.id], cap: Number(e.target.value) },
+                    }))
+                  }
                   className={field}
                 />
+                <p className="mt-2 text-xs font-medium text-brand">
+                  ≈ {previewHours(plan.tier as "standard" | "premium", plan.id)} included
+                </p>
               </div>
             ))}
           </div>

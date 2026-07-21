@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { type Content, mergeContent } from "./content";
 import { db } from "./db";
-import type { Pack, TierConfig, TierKey } from "./pricing";
+import { allowanceMinutes, type Pack, type TierConfig, type TierKey } from "./pricing";
 import { settings as settingsTable } from "./schema";
 
 // Admin-editable configuration. Code holds the defaults; the `settings` table
@@ -41,8 +41,7 @@ export interface Settings {
 
 /** Fair-use minute allowance for a plan's period: price × cap% ÷ cost/minute. */
 export function planAllowanceMinutes(plan: SubscriptionPlan, s: Settings): number {
-  const costPerMin = s.costPerMinuteCents[plan.tier] || 0.1;
-  return Math.max(1, Math.floor((plan.priceUsdCents * (plan.capPct / 100)) / costPerMin));
+  return allowanceMinutes(plan.priceUsdCents, plan.capPct, s.costPerMinuteCents[plan.tier] || 0.1);
 }
 
 export const DEFAULT_SETTINGS: Settings = {

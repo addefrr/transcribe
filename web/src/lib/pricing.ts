@@ -28,3 +28,32 @@ export function isTier(value: string): value is TierKey {
 export function estimateCredits(durationSeconds: number, creditsPerMinute: number): number {
   return Math.max(1, Math.ceil(durationSeconds / 60)) * creditsPerMinute;
 }
+
+/**
+ * Fair-use minute allowance for a subscription period, as a pure function so the
+ * admin UI can preview it without importing the DB.
+ *
+ * allowance = (plan price ÷ our compute cost per minute) × cap%
+ *           = price × cap% ÷ cost-per-minute
+ *
+ * `costPerMinuteCents` is OUR cost to transcribe a minute of audio (what the
+ * admin enters, per hour, and we store as ¢/min). So the cap is a share of the
+ * audio our own cost would buy for that subscription's price — not the user's.
+ */
+export function allowanceMinutes(
+  priceUsdCents: number,
+  capPct: number,
+  costPerMinuteCents: number,
+): number {
+  const cost = costPerMinuteCents > 0 ? costPerMinuteCents : 0.1;
+  return Math.max(1, Math.floor((priceUsdCents * (capPct / 100)) / cost));
+}
+
+// Admins think in dollars-per-hour of audio (how ASR providers quote); we store
+// cents-per-minute. These convert between the two.
+export function costPerHourUsd(costPerMinuteCents: number): number {
+  return (costPerMinuteCents * 60) / 100;
+}
+export function costPerMinuteCentsFromHourUsd(dollarsPerHour: number): number {
+  return (dollarsPerHour * 100) / 60;
+}

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/admin";
 import { type Content, CONTENT_NAMESPACES, DEFAULT_CONTENT } from "@/lib/content";
-import { TIER_KEYS } from "@/lib/pricing";
+import { costPerHourUsd, costPerMinuteCentsFromHourUsd, TIER_KEYS } from "@/lib/pricing";
 import {
   getContent,
   getSettings,
@@ -67,12 +67,20 @@ export async function saveSettings(formData: FormData): Promise<void> {
 
   // Subscriptions: toggle, per-tier compute cost, and per-plan price/cap/label.
   await setSetting("subscriptionsEnabled", formData.get("subscriptionsEnabled") === "on");
+  // The form submits our cost as $/hour of audio; store it as ¢/min.
+  const costHourStd = num(
+    formData,
+    "cost_standard",
+    costPerHourUsd(current.costPerMinuteCents.standard),
+  );
+  const costHourPrem = num(
+    formData,
+    "cost_premium",
+    costPerHourUsd(current.costPerMinuteCents.premium),
+  );
   await setSetting("costPerMinuteCents", {
-    standard: Math.max(
-      0.001,
-      num(formData, "cost_standard", current.costPerMinuteCents.standard),
-    ),
-    premium: Math.max(0.001, num(formData, "cost_premium", current.costPerMinuteCents.premium)),
+    standard: Math.max(0.0001, costPerMinuteCentsFromHourUsd(costHourStd)),
+    premium: Math.max(0.0001, costPerMinuteCentsFromHourUsd(costHourPrem)),
   });
   const plans: SubscriptionPlan[] = current.subscriptionPlans.map((plan) => ({
     ...plan,
