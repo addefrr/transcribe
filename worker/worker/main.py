@@ -13,7 +13,7 @@ def run() -> None:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     backends = config.TRANSCRIBE_BACKEND or (
-        f"standard=qwen(+{config.STANDARD_FALLBACK_BACKEND}), premium={config.PREMIUM_BACKEND}"
+        f"standard={config.STANDARD_BACKEND}, premium={config.PREMIUM_BACKEND}"
     )
     log.info("worker starting (backends: %s, storage=%s)", backends, config.STORAGE_DRIVER)
     conn = db.connect()
@@ -24,6 +24,7 @@ def run() -> None:
             if now - last_stale_sweep > 60:
                 db.requeue_stale(conn)
                 pipeline.sweep_expired_audio(conn)
+                pipeline.sweep_expired_uploads(conn)
                 last_stale_sweep = now
             # Expand any pending playlist batches first (quick metadata calls).
             batch = db.claim_batch(conn)

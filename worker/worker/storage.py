@@ -37,19 +37,28 @@ def _safe_local_path(key: str) -> str:
     return path
 
 
-def fetch_upload(key: str, workdir: str) -> str:
-    """Bring an uploaded file into the job workdir; returns its local path."""
+def fetch_upload(key: str, workdir: str, expected_size: int) -> str:
+    """Bring a verified uploaded file into the workdir; returns its path."""
     dest = os.path.join(workdir, "upload" + os.path.splitext(key)[1])
     if config.STORAGE_DRIVER == "local":
         src = _safe_local_path(key)
         if not os.path.exists(src):
             raise JobError("Uploaded file not found — it may have expired.")
+        if os.path.getsize(src) != expected_size:
+            raise JobError("Uploaded file size changed after it was checked.")
         shutil.copyfile(src, dest)
     else:
         try:
+            head = _s3().head_object(Bucket=config.S3_BUCKET, Key=key)
+            if int(head.get("ContentLength", -1)) != expected_size:
+                raise JobError("Uploaded file size changed after it was checked.")
             _s3().download_file(config.S3_BUCKET, key, dest)
+            if os.path.getsize(dest) != expected_size:
+                raise JobError("Downloaded upload did not match its expected size.")
+        except JobError:
+            raise
         except Exception as exc:
-            raise JobError(f"Could not fetch upload from storage: {exc}") from exc
+            raise JobError("Could not fetch the upload from storage.") from exc
     return dest
 
 
@@ -99,14 +108,20 @@ def presign_get(key: str, expires: int = 6 * 3600) -> str:
     )
 
 
-def delete_key(key: str) -> None:
-    """Best-effort delete of a stored object; never raises."""
+def delete_key(key: str) -> bool:
+    """Best-effort delete of a stored object.
+
+    Returns whether the object is gone. Callers keep lifecycle metadata when a
+    provider error prevents deletion so a later cleanup sweep can retry.
+    """
     try:
         if config.STORAGE_DRIVER == "local":
             os.remove(_safe_local_path(key))
         else:
             _s3().delete_object(Bucket=config.S3_BUCKET, Key=key)
+        return True
     except FileNotFoundError:
-        pass
+        return True
     except Exception:
         log.warning("could not delete stored object %r", key, exc_info=True)
+        return False

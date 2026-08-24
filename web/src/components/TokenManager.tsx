@@ -4,8 +4,7 @@ import { useActionState, useState } from "react";
 import { createToken, revokeToken, type TokenState } from "@/app/tokens/actions";
 import type { PublicApiToken } from "@/lib/apiTokens";
 
-const field =
-  "w-full rounded-md border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-brand";
+const field = "field-input w-full";
 
 function fmtDate(d: Date | null): string {
   if (!d) return "never";
@@ -16,17 +15,25 @@ function fmtDate(d: Date | null): string {
   });
 }
 
-export default function TokenManager({ tokens }: { tokens: PublicApiToken[] }) {
+export default function TokenManager({
+  tokens,
+  emailVerified,
+}: {
+  tokens: PublicApiToken[];
+  emailVerified: boolean;
+}) {
   const [state, formAction, pending] = useActionState<TokenState, FormData>(createToken, {});
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
 
   async function copy(token: string) {
     try {
       await navigator.clipboard.writeText(token);
       setCopied(true);
+      setCopyError(false);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      /* clipboard blocked — user can select the field manually */
+      setCopyError(true);
     }
   }
 
@@ -40,33 +47,42 @@ export default function TokenManager({ tokens }: { tokens: PublicApiToken[] }) {
             Copy it now — for your security we won’t show it again.
           </p>
           <div className="mt-3 flex gap-2">
-            <input readOnly value={state.token} className={`${field} font-mono`} />
+            <input aria-label="New API token" readOnly value={state.token} onFocus={(event) => event.currentTarget.select()} className={`${field} font-mono`} />
             <button
               type="button"
               onClick={() => copy(state.token!)}
-              className="shrink-0 rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink hover:opacity-90"
+              className="button-primary shrink-0"
             >
               {copied ? "Copied!" : "Copy"}
             </button>
           </div>
+          <p role={copyError ? "alert" : "status"} className={`mt-2 min-h-5 text-sm ${copyError ? "text-danger" : "text-muted"}`}>
+            {copyError ? "Clipboard access was blocked. Select and copy the token field instead." : copied ? "Token copied." : ""}
+          </p>
         </div>
       )}
 
       {/* Create a token. */}
-      <form action={formAction} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <form
+        action={formAction}
+        aria-busy={pending}
+        className="flex flex-col gap-3 sm:flex-row sm:items-end"
+      >
         <label className="block flex-1">
-          <span className="mb-1 block text-sm text-muted">Token name</span>
-          <input name="name" placeholder="e.g. My laptop extension" required className={field} />
+          <span className="field-label mb-1">Token name</span>
+          <input name="name" placeholder="e.g. My laptop extension" required maxLength={60} disabled={!emailVerified || tokens.length >= 10} className={field} />
         </label>
         <button
           type="submit"
-          disabled={pending}
-          className="rounded-md bg-brand px-5 py-2 text-sm font-medium text-brand-ink hover:opacity-90 disabled:opacity-50"
+          disabled={pending || !emailVerified || tokens.length >= 10}
+          className="button-primary"
         >
-          {pending ? "…" : "Create token"}
+          {pending ? "Creating token…" : "Create token"}
         </button>
       </form>
-      {state.error && <p className="-mt-4 text-sm text-red-600">{state.error}</p>}
+      {!emailVerified && <p role="status" className="status-info">Verify your email before creating an API token.</p>}
+      {tokens.length >= 10 && <p role="status" className="status-info">Token limit reached. Revoke one before creating another.</p>}
+      {state.error && <p role="alert" className="status-error">{state.error}</p>}
 
       {/* Existing tokens. */}
       <div>
@@ -74,14 +90,22 @@ export default function TokenManager({ tokens }: { tokens: PublicApiToken[] }) {
         {tokens.length === 0 ? (
           <p className="text-sm text-muted">No tokens yet.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-line">
-            <table className="w-full text-sm">
+          <div
+            role="region"
+            aria-label="Personal API tokens"
+            tabIndex={0}
+            className="overflow-x-auto rounded-xl border border-line"
+          >
+            <table className="w-full min-w-[36rem] text-sm">
+              <caption className="sr-only">Personal API tokens and their last use</caption>
               <thead className="bg-paper-2 text-left text-xs uppercase tracking-wide text-muted">
                 <tr>
-                  <th className="px-4 py-2 font-medium">Name</th>
-                  <th className="px-4 py-2 font-medium">Created</th>
-                  <th className="px-4 py-2 font-medium">Last used</th>
-                  <th className="px-4 py-2" />
+                  <th scope="col" className="px-4 py-2 font-medium">Name</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Created</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Last used</th>
+                  <th scope="col" className="px-4 py-2">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -91,11 +115,13 @@ export default function TokenManager({ tokens }: { tokens: PublicApiToken[] }) {
                     <td className="px-4 py-2 text-muted">{fmtDate(t.createdAt)}</td>
                     <td className="px-4 py-2 text-muted">{fmtDate(t.lastUsedAt)}</td>
                     <td className="px-4 py-2 text-right">
-                      <form action={revokeToken}>
+                      <form action={revokeToken} onSubmit={(event) => {
+                        if (!window.confirm(`Revoke the token “${t.name}”? Anything using it will stop working immediately.`)) event.preventDefault();
+                      }}>
                         <input type="hidden" name="id" value={t.id} />
                         <button
                           type="submit"
-                          className="text-xs text-red-600 hover:underline"
+                          className="inline-flex min-h-11 items-center px-2 text-sm text-danger hover:underline"
                         >
                           Revoke
                         </button>

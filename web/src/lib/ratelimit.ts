@@ -1,44 +1,70 @@
+import { createHash } from "node:crypto";
+import { eq, lt, sql } from "drizzle-orm";
 import { headers } from "next/headers";
-
-// In-memory fixed-window rate limiter. Sufficient for a single long-running
-// Node server (this app's deployment model); swap for Redis if you run multiple
-// instances. State lives in module scope so it persists across requests.
-
-type Window = { count: number; resetAt: number };
-const buckets = new Map<string, Window>();
+import { db } from "./db";
+import { rateLimits } from "./schema";
 
 export type RateResult = { ok: boolean; retryAfterSec: number };
 
-export function rateLimit(key: string, limit: number, windowMs: number): RateResult {
-  const now = Date.now();
-
-  // Opportunistic prune so the map doesn't grow without bound.
-  if (buckets.size > 5000 && Math.random() < 0.02) {
-    for (const [k, w] of buckets) if (w.resetAt <= now) buckets.delete(k);
-  }
-
-  const w = buckets.get(key);
-  if (!w || w.resetAt <= now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    return { ok: true, retryAfterSec: 0 };
-  }
-  if (w.count >= limit) {
-    return { ok: false, retryAfterSec: Math.ceil((w.resetAt - now) / 1000) };
-  }
-  w.count += 1;
-  return { ok: true, retryAfterSec: 0 };
+function bucketId(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
 }
 
-// Clears a key's counter — call after a legitimate success (e.g. a correct
-// login) so occasional failures plus normal usage never lock a real user out.
-export function resetRateLimit(key: string): void {
-  buckets.delete(key);
+/**
+ * An atomic fixed-window limiter shared by every web instance.
+ *
+ * The logical key is hashed before storage so email addresses and IPs do not
+ * become readable operational data. PostgreSQL performs the increment in one
+ * statement, avoiding race-prone read/then-write checks.
+ */
+export async function rateLimit(
+  key: string,
+  limit: number,
+  windowMs: number,
+): Promise<RateResult> {
+  const now = new Date();
+  const resetAt = new Date(now.getTime() + windowMs);
+  const rows = await db.execute<{ count: number; reset_at: Date }>(sql`
+    INSERT INTO rate_limits ("key", "count", "reset_at")
+    VALUES (${bucketId(key)}, 1, ${resetAt})
+    ON CONFLICT ("key") DO UPDATE SET
+      "count" = CASE
+        WHEN rate_limits."reset_at" <= ${now} THEN 1
+        ELSE least(rate_limits."count" + 1, ${limit + 1})
+      END,
+      "reset_at" = CASE
+        WHEN rate_limits."reset_at" <= ${now} THEN ${resetAt}
+        ELSE rate_limits."reset_at"
+      END
+    RETURNING "count", "reset_at"
+  `);
+  const row = rows[0];
+  // Opportunistic expiry keeps the shared table bounded without a separate
+  // maintenance service. The reset-time index makes this deletion inexpensive.
+  if (Math.random() < 0.01) {
+    await db.delete(rateLimits).where(lt(rateLimits.resetAt, now));
+  }
+  const rowReset = row.reset_at instanceof Date ? row.reset_at : new Date(row.reset_at);
+  return {
+    ok: row.count <= limit,
+    retryAfterSec: row.count <= limit
+      ? 0
+      : Math.max(1, Math.ceil((rowReset.getTime() - now.getTime()) / 1000)),
+  };
 }
 
-// Best-effort client IP from proxy headers; falls back to a shared bucket.
+/** Clear a successful user's bucket without exposing the logical key. */
+export async function resetRateLimit(key: string): Promise<void> {
+  await db.delete(rateLimits).where(eq(rateLimits.key, bucketId(key)));
+}
+
+/** Best-effort client address supplied by the trusted deployment proxy. */
 export async function clientIp(): Promise<string> {
-  const h = await headers();
-  const xff = h.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  return h.get("x-real-ip") ?? "unknown";
+  const requestHeaders = await headers();
+  const value =
+    requestHeaders.get("cf-connecting-ip") ??
+    requestHeaders.get("x-forwarded-for")?.split(",")[0] ??
+    requestHeaders.get("x-real-ip") ??
+    "unknown";
+  return value.trim().slice(0, 128);
 }

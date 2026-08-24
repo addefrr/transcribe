@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { jobs, transcripts } from "@/lib/schema";
+import { isTier } from "@/lib/pricing";
+import { getSettings } from "@/lib/settings";
 import { segmentsToSrt, segmentsToTxt, segmentsToVtt } from "@/lib/subtitles";
 import { isUuid } from "@/lib/uuid";
 
@@ -31,6 +33,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     .limit(1);
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const settings = await getSettings();
+  const features = isTier(row.job.tier)
+    ? settings.tierFeatures[row.job.tier]
+    : settings.tierFeatures.standard;
+  const allowed = format === "txt" ? features.textExport : features.subtitleExport;
+  if (!allowed) {
+    return NextResponse.json({ error: "This export is not included in the selected tier." }, { status: 403 });
+  }
+
   const { transcript } = row;
   const content =
     format === "txt"
@@ -48,6 +59,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     headers: {
       "content-type": `${FORMATS[format].mime}; charset=utf-8`,
       "content-disposition": `attachment; filename="${base.replace(/[^\w.-]+/g, "_")}.${format}"`,
+      "cache-control": "private, no-store",
     },
   });
 }

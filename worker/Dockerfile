@@ -7,7 +7,7 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY worker ./worker
 
-# Default install talks to the managed APIs (Groq/AssemblyAI) — no heavy ML deps.
+# Default install talks to the managed APIs (Groq/Soniox) — no heavy ML deps.
 # For a self-hosted faster-whisper worker, build with:  pip install ".[local]"
 RUN pip install --no-cache-dir .
 

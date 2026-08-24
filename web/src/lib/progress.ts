@@ -1,86 +1,101 @@
-// Live progress + ETA model for a job. Client-safe (no DB import). We don't get
-// fine-grained progress from the ASR providers, so this is an honest estimate:
-// the bar advances by pipeline stage and, while transcribing, eases toward (but
-// never reaches) 100% based on elapsed time against a rough throughput guess.
+// Client-safe descriptions of the states persisted by the worker. Providers do
+// not expose a reliable completion percentage or ETA, so the UI reports only
+// the latest confirmed stage.
 
 export const STAGES = [
-  { key: "queued", label: "Queued" },
-  { key: "fetching", label: "Fetching media" },
+  { key: "pending", label: "Queued" },
+  { key: "probing", label: "Checking media" },
+  { key: "downloading", label: "Preparing media" },
   { key: "transcribing", label: "Transcribing" },
-  { key: "done", label: "Ready" },
+  { key: "completed", label: "Ready" },
 ] as const;
 
 export type StageKey = (typeof STAGES)[number]["key"];
-
-// Managed ASR runs several times faster than realtime; assume ~4x with a floor
-// so short clips still show a believable few-second estimate.
-function estTranscribeSecs(durationSeconds: number | null | undefined): number {
-  const d = durationSeconds && durationSeconds > 0 ? durationSeconds : 60;
-  return Math.max(8, d * 0.25);
-}
-
-function toMs(t: Date | string | null | undefined): number | null {
-  if (!t) return null;
-  const ms = typeof t === "string" ? Date.parse(t) : t.getTime();
-  return Number.isNaN(ms) ? null : ms;
-}
+export type StatusTone = "neutral" | "attention" | "working" | "success" | "danger";
 
 export type JobProgress = {
-  stage: StageKey;
-  stageIndex: number;
-  fraction: number; // 0..1 for the progress bar
-  etaSeconds: number | null; // remaining estimate while transcribing
-  done: boolean;
-  failed: boolean;
+  status: string;
+  label: string;
+  description: string;
+  stage: StageKey | null;
   active: boolean;
+  tone: StatusTone;
 };
 
-export function jobProgress(
-  job: {
-    status: string;
-    durationSeconds?: number | null;
-    claimedAt?: Date | string | null;
+const KNOWN: Record<string, Omit<JobProgress, "status">> = {
+  pending: {
+    label: "Queued",
+    description: "Waiting for a worker to claim this transcription.",
+    stage: "pending",
+    active: true,
+    tone: "neutral",
   },
-  nowMs: number = Date.now(),
-): JobProgress {
-  const base = (stage: StageKey, fraction: number, etaSeconds: number | null): JobProgress => ({
-    stage,
-    stageIndex: STAGES.findIndex((s) => s.key === stage),
-    fraction,
-    etaSeconds,
-    done: job.status === "completed",
-    failed: job.status === "failed",
-    active: ["pending", "probing", "downloading", "transcribing"].includes(job.status),
-  });
+  probing: {
+    label: "Checking media",
+    description: "Checking the source and recording length before processing continues.",
+    stage: "probing",
+    active: true,
+    tone: "attention",
+  },
+  awaiting_confirmation: {
+    label: "Confirmation needed",
+    description: "The duration check is complete. Review the charge and confirm to continue.",
+    stage: null,
+    active: false,
+    tone: "attention",
+  },
+  downloading: {
+    label: "Preparing media",
+    description: "Fetching or preparing the media for speech recognition.",
+    stage: "downloading",
+    active: true,
+    tone: "working",
+  },
+  transcribing: {
+    label: "Transcribing",
+    description:
+      "The speech-to-text provider is processing the audio. It does not report a reliable percentage or finish time.",
+    stage: "transcribing",
+    active: true,
+    tone: "working",
+  },
+  completed: {
+    label: "Ready",
+    description: "The transcript is ready to review.",
+    stage: "completed",
+    active: false,
+    tone: "success",
+  },
+  failed: {
+    label: "Failed",
+    description: "Processing stopped before a transcript was completed.",
+    stage: null,
+    active: false,
+    tone: "danger",
+  },
+};
 
-  switch (job.status) {
-    case "pending":
-      return base("queued", 0.05, null);
-    case "probing":
-      return base("fetching", 0.15, null);
-    case "downloading":
-      return base("fetching", 0.3, null);
-    case "transcribing": {
-      const est = estTranscribeSecs(job.durationSeconds);
-      const claimedMs = toMs(job.claimedAt) ?? nowMs;
-      const elapsed = Math.max(0, (nowMs - claimedMs) / 1000);
-      const fraction = Math.min(0.95, 0.4 + 0.55 * (elapsed / est));
-      const etaSeconds = Math.max(0, Math.ceil(est - elapsed));
-      return base("transcribing", fraction, etaSeconds);
-    }
-    case "completed":
-      return base("done", 1, 0);
-    case "failed":
-      return base("transcribing", 0, null);
-    default:
-      return base("queued", 0.05, null);
-  }
+function humanizeStatus(status: string): string {
+  const words = status.replace(/[_-]+/g, " ").trim();
+  if (!words) return "Unknown status";
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-export function formatEta(seconds: number | null): string {
-  if (seconds === null) return "";
-  if (seconds <= 0) return "almost done";
-  if (seconds < 60) return `about ${seconds}s left`;
-  const m = Math.ceil(seconds / 60);
-  return `about ${m} min left`;
+export function jobProgress(job: { status: string }): JobProgress {
+  const known = KNOWN[job.status];
+  if (!known) {
+    return {
+      status: job.status,
+      label: humanizeStatus(job.status),
+      description: "The service reported a processing state this page does not recognize yet.",
+      stage: null,
+      active: false,
+      tone: "neutral",
+    };
+  }
+
+  return {
+    status: job.status,
+    ...known,
+  };
 }

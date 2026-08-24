@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { jobs } from "@/lib/schema";
+import { isTier } from "@/lib/pricing";
+import { getSettings } from "@/lib/settings";
 import { isUuid } from "@/lib/uuid";
 
 // Turn on public sharing: assign a random token if the job doesn't already have
@@ -23,6 +25,16 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
   if (!job) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (job.status !== "completed") {
     return NextResponse.json({ error: "Only finished transcripts can be shared" }, { status: 400 });
+  }
+  const settings = await getSettings();
+  const features = isTier(job.tier)
+    ? settings.tierFeatures[job.tier]
+    : settings.tierFeatures.standard;
+  if (!features.publicSharing) {
+    return NextResponse.json(
+      { error: "Public sharing is not included in this tier." },
+      { status: 403 },
+    );
   }
 
   let shareId = job.shareId;

@@ -3,132 +3,242 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-// Global watcher (mounted in the layout for signed-in users). Polls the job
-// list and, when a job finishes while you're on the site, plays a chime, shows
-// an in-app toast, and — if you opted in — a browser notification. It seeds
-// known statuses on first load so it never fires for jobs that finished before
-// you arrived.
+// Global watcher mounted for signed-in users. It seeds the current statuses so
+// an existing result never looks newly completed, then reports only actual
+// terminal transitions. Browser notifications and completion sound both require
+// an explicit user choice.
 
 const ACTIVE = new Set(["pending", "probing", "downloading", "transcribing"]);
+const TERMINAL = new Set(["completed", "failed"]);
+const VISIBLE_POLL_MS = 4_000;
+const IDLE_POLL_MS = 30_000;
+const HIDDEN_POLL_MS = 60_000;
 
-type Toast = { key: number; jobId: string; name: string; failed: boolean };
+type WatchedJob = {
+  id: string;
+  status: string;
+  outputName?: string | null;
+  sourceType: string;
+  sourceUrl?: string | null;
+  originalFilename?: string | null;
+};
+
+type Toast = {
+  key: string;
+  jobId: string;
+  name: string;
+  failed: boolean;
+};
+
+function notificationName(job: WatchedJob): string {
+  return (
+    job.outputName ??
+    (job.sourceType === "url" ? "Linked media" : job.originalFilename) ??
+    "Your recording"
+  );
+}
 
 export default function JobNotifier() {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [muted, setMuted] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
-  const mutedRef = useRef(false);
-  const prev = useRef<Map<string, string>>(new Map());
+  const soundEnabledRef = useRef(false);
+  const previousStatuses = useRef<Map<string, string>>(new Map());
   const seeded = useRef(false);
-  const audioCtx = useRef<AudioContext | null>(null);
+  const audioContext = useRef<AudioContext | null>(null);
+  const toastSequence = useRef(0);
+  const successTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
-    const m = localStorage.getItem("notifySound") === "off";
-    setMuted(m);
-    mutedRef.current = m;
+    const enabled = localStorage.getItem("notifySound") === "on";
+    setSoundEnabled(enabled);
+    soundEnabledRef.current = enabled;
   }, []);
 
-  function toggleMute() {
-    const next = !mutedRef.current;
-    mutedRef.current = next;
-    setMuted(next);
-    localStorage.setItem("notifySound", next ? "off" : "on");
+  useEffect(
+    () => () => {
+      for (const timer of successTimers.current.values()) clearTimeout(timer);
+      successTimers.current.clear();
+      void audioContext.current?.close().catch(() => {});
+    },
+    [],
+  );
+
+  function toggleSound() {
+    const next = !soundEnabledRef.current;
+    soundEnabledRef.current = next;
+    setSoundEnabled(next);
+    localStorage.setItem("notifySound", next ? "on" : "off");
+
+    // Create/resume the context only in response to the user's gesture. No
+    // sound is played by this preference control.
+    if (next) {
+      try {
+        const Context =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (Context) {
+          audioContext.current ??= new Context();
+          if (audioContext.current.state === "suspended") {
+            void audioContext.current.resume().catch(() => {});
+          }
+        }
+      } catch {
+        // The visual and browser notifications remain available.
+      }
+    }
   }
 
-  function playChime() {
-    if (mutedRef.current) return;
+  function playCompletionChime() {
+    if (!soundEnabledRef.current) return;
     try {
-      const Ctx =
+      const Context =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (!Ctx) return;
-      audioCtx.current ??= new Ctx();
-      const ctx = audioCtx.current;
-      if (ctx.state === "suspended") ctx.resume();
-      const t0 = ctx.currentTime;
-      // Two rising notes — a gentle "ta-da".
-      [880, 1174.66].forEach((freq, i) => {
-        const start = t0 + i * 0.13;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(0.16, start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.3);
-        osc.connect(gain).connect(ctx.destination);
-        osc.start(start);
-        osc.stop(start + 0.32);
-      });
+      if (!Context) return;
+      audioContext.current ??= new Context();
+      const context = audioContext.current;
+      if (context.state === "suspended") void context.resume().catch(() => {});
+      const start = context.currentTime;
+      for (const [index, frequency] of [880, 1174.66].entries()) {
+        const noteStart = start + index * 0.13;
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.0001, noteStart);
+        gain.gain.exponentialRampToValueAtTime(0.12, noteStart + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + 0.3);
+        oscillator.connect(gain).connect(context.destination);
+        oscillator.start(noteStart);
+        oscillator.stop(noteStart + 0.32);
+      }
     } catch {
-      /* audio blocked — the toast still shows */
+      // The in-app notification remains visible.
     }
   }
 
-  function osNotify(name: string, failed: boolean, jobId: string) {
+  function sendBrowserNotification(name: string, failed: boolean, jobId: string) {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
     try {
-      const n = new Notification(failed ? "Transcription failed" : "Transcript ready", {
-        body: name,
-        tag: jobId,
-      });
-      n.onclick = () => {
+      const notification = new Notification(
+        failed ? "Transcription failed" : "Transcript ready",
+        { body: name, tag: jobId },
+      );
+      notification.onclick = () => {
+        notification.close();
         window.focus();
-        window.location.href = `/jobs/${jobId}`;
+        window.location.assign(`/jobs/${jobId}`);
       };
     } catch {
-      /* ignore */
+      // The in-app notification remains visible.
     }
   }
 
-  function addToast(t: Toast) {
-    setToasts((cur) => [...cur, t]);
-    setTimeout(() => setToasts((cur) => cur.filter((x) => x.key !== t.key)), 8000);
+  function dismiss(key: string) {
+    const timer = successTimers.current.get(key);
+    if (timer) clearTimeout(timer);
+    successTimers.current.delete(key);
+    setToasts((current) => current.filter((toast) => toast.key !== key));
   }
 
-  const dismiss = (key: number) => setToasts((cur) => cur.filter((x) => x.key !== key));
+  function addToast(jobId: string, name: string, failed: boolean) {
+    const key = `${jobId}-${++toastSequence.current}`;
+    const toast = { key, jobId, name, failed };
+    setToasts((current) => [...current, toast]);
+
+    // A successful completion remains available from the dashboard and may
+    // clear after a generous interval. Failures require explicit dismissal.
+    if (!failed) {
+      const timer = setTimeout(() => {
+        successTimers.current.delete(key);
+        setToasts((current) => current.filter((candidate) => candidate.key !== key));
+      }, 12_000);
+      successTimers.current.set(key, timer);
+    }
+  }
 
   useEffect(() => {
-    let stop = false;
+    let stopped = false;
+    let inFlight = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let controller: AbortController | null = null;
+
+    function schedule(active = false) {
+      if (stopped) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(
+        poll,
+        document.hidden ? HIDDEN_POLL_MS : active ? VISIBLE_POLL_MS : IDLE_POLL_MS,
+      );
+    }
+
     async function poll() {
+      if (stopped || inFlight) return;
+      inFlight = true;
+      const request = new AbortController();
+      controller = request;
+      let anyActive = false;
       try {
-        const res = await fetch("/api/jobs");
-        if (!res.ok || stop) return;
-        const { jobs } = await res.json();
-        let anyActive = false;
-        for (const j of jobs) {
-          if (ACTIVE.has(j.status)) anyActive = true;
-          const before = prev.current.get(j.id);
-          if (seeded.current && before && ACTIVE.has(before) && !ACTIVE.has(j.status)) {
-            const name =
-              j.outputName ??
-              (j.sourceType === "url" ? j.sourceUrl : j.originalFilename) ??
-              "Your recording";
-            const failed = j.status === "failed";
-            addToast({ key: Date.now() + Math.random(), jobId: j.id, name, failed });
-            playChime();
-            osNotify(name, failed, j.id);
+        const response = await fetch("/api/jobs", {
+          cache: "no-store",
+          signal: request.signal,
+        });
+        if (!response.ok || stopped) return;
+        const payload: { jobs: WatchedJob[] } = await response.json();
+        for (const job of payload.jobs) {
+          if (ACTIVE.has(job.status)) anyActive = true;
+          const previous = previousStatuses.current.get(job.id);
+          if (
+            seeded.current &&
+            previous &&
+            ACTIVE.has(previous) &&
+            TERMINAL.has(job.status)
+          ) {
+            const name = notificationName(job);
+            const failed = job.status === "failed";
+            addToast(job.id, name, failed);
+            if (!failed) playCompletionChime();
+            sendBrowserNotification(name, failed, job.id);
           }
-          prev.current.set(j.id, j.status);
+          previousStatuses.current.set(job.id, job.status);
         }
+
         seeded.current = true;
-        // Only offer the opt-in while there's work in progress; drop it once
-        // everything has finished so it doesn't linger with nothing to notify.
         setShowPrompt(
           anyActive &&
             typeof Notification !== "undefined" &&
             Notification.permission === "default" &&
             localStorage.getItem("notifyPromptDismissed") !== "1",
         );
-      } catch {
-        /* transient — next tick retries */
+      } catch (caught) {
+        if (!(caught instanceof Error && caught.name === "AbortError")) {
+          // A later poll retries; persistent job failures are reported by the API state.
+        }
+      } finally {
+        if (controller === request) controller = null;
+        inFlight = false;
+        schedule(anyActive);
       }
     }
-    poll();
-    const t = setInterval(poll, 4000);
+
+    function onVisibilityChange() {
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      if (document.hidden) {
+        schedule();
+      } else {
+        void poll();
+      }
+    }
+
+    void poll();
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
-      stop = true;
-      clearInterval(t);
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      controller?.abort();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 
@@ -136,7 +246,7 @@ export default function JobNotifier() {
     try {
       if (typeof Notification !== "undefined") await Notification.requestPermission();
     } catch {
-      /* ignore */
+      // The in-app notification remains available.
     }
     setShowPrompt(false);
     localStorage.setItem("notifyPromptDismissed", "1");
@@ -150,66 +260,97 @@ export default function JobNotifier() {
   if (!showPrompt && toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2">
+    <section
+      aria-label="Transcription notifications"
+      className="fixed bottom-4 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"
+    >
       {showPrompt && (
-        <div className="rounded-xl border border-line bg-paper p-3 text-sm shadow-lg">
-          <p>Want a heads-up when your transcript is ready?</p>
-          <div className="mt-2 flex gap-2">
+        <div className="rounded-xl border border-line bg-paper p-4 text-sm shadow-lg">
+          <h2 className="font-semibold">Get a completion notification?</h2>
+          <p className="mt-1 text-muted">
+            Browser notifications are optional. Completion sound stays off unless you turn it on.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={enableNotifications}
-              className="rounded-md bg-brand px-3 py-1 text-xs font-medium text-brand-ink hover:opacity-90"
+              className="min-h-11 rounded-md bg-brand px-3 py-2 text-sm font-medium text-brand-ink hover:opacity-90"
             >
-              Notify me
+              Enable browser notifications
+            </button>
+            <button
+              type="button"
+              onClick={toggleSound}
+              aria-pressed={soundEnabled}
+              className="min-h-11 rounded-md border border-line px-3 py-2 text-sm hover:border-ink"
+            >
+              {soundEnabled ? "Turn sound off" : "Turn sound on"}
             </button>
             <button
               type="button"
               onClick={dismissPrompt}
-              className="rounded-md px-3 py-1 text-xs text-muted hover:text-ink"
+              className="min-h-11 rounded-md px-3 py-2 text-sm text-muted hover:text-ink"
             >
-              No thanks
+              Not now
             </button>
           </div>
         </div>
       )}
-      {toasts.map((t) => (
-        <div key={t.key} className="rounded-xl border border-line bg-paper p-3 shadow-lg">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">
-                {t.failed ? "Transcription failed" : "Transcript ready ✨"}
+
+      {toasts.map((toast) => (
+        <div
+          key={toast.key}
+          className={`rounded-xl border bg-paper p-4 shadow-lg ${
+            toast.failed ? "border-danger/30" : "border-line"
+          }`}
+        >
+          <div
+            role={toast.failed ? "alert" : "status"}
+            aria-live={toast.failed ? "assertive" : "polite"}
+            aria-atomic="true"
+          >
+            <p className="text-sm font-semibold">
+              {toast.failed ? "Transcription failed" : "Transcript ready"}
+            </p>
+            <p className="mt-1 break-words text-xs text-muted">{toast.name}</p>
+            {toast.failed && (
+              <p className="mt-2 text-xs text-muted">
+                Open the job to see what happened and the available recovery steps.
               </p>
-              <p className="truncate text-xs text-muted">{t.name}</p>
-            </div>
+            )}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <Link
+              href={`/jobs/${toast.jobId}`}
+              onClick={() => dismiss(toast.key)}
+              className="inline-flex min-h-11 items-center text-sm font-medium text-brand hover:underline"
+            >
+              {toast.failed ? "Review failed job" : "View transcript"}
+              <span aria-hidden="true">&nbsp;→</span>
+            </Link>
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={toggleMute}
-                title={muted ? "Unmute completion sound" : "Mute completion sound"}
-                className="text-muted hover:text-ink"
+                onClick={toggleSound}
+                aria-pressed={soundEnabled}
+                aria-label={soundEnabled ? "Turn completion sound off" : "Turn completion sound on"}
+                className="grid h-11 w-11 place-items-center rounded-md text-muted hover:bg-paper-2 hover:text-ink"
               >
-                {muted ? "🔇" : "🔊"}
+                <span aria-hidden="true">{soundEnabled ? "🔊" : "🔇"}</span>
               </button>
               <button
                 type="button"
-                onClick={() => dismiss(t.key)}
-                className="text-muted hover:text-ink"
+                onClick={() => dismiss(toast.key)}
+                aria-label={`Dismiss ${toast.failed ? "failure" : "completion"} notification`}
+                className="grid h-11 w-11 place-items-center rounded-md text-muted hover:bg-paper-2 hover:text-ink"
               >
-                ✕
+                <span aria-hidden="true">×</span>
               </button>
             </div>
           </div>
-          {!t.failed && (
-            <Link
-              href={`/jobs/${t.jobId}`}
-              onClick={() => dismiss(t.key)}
-              className="mt-1 inline-block text-sm text-brand hover:underline"
-            >
-              View transcript →
-            </Link>
-          )}
         </div>
       ))}
-    </div>
+    </section>
   );
 }

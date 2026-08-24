@@ -1,61 +1,56 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { formatEta, jobProgress, STAGES } from "@/lib/progress";
-import type { Job } from "@/lib/schema";
+import { jobProgress, STAGES } from "@/lib/progress";
 
-// Renders the pipeline stepper, an estimated progress bar, and a live ETA that
-// ticks between server polls. Shown only while a job is active.
-export default function JobProgress({ job }: { job: Job }) {
-  const [now, setNow] = useState(() => Date.now());
+// Providers do not expose trustworthy completion percentages or ETAs. This
+// component therefore announces only the stage most recently stored by the
+// worker and presents the remaining pipeline as orientation, not a forecast.
+export default function JobProgress({ job }: { job: { id: string; status: string } }) {
+  const progress = jobProgress(job);
+  if (!progress.active) return null;
 
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  const p = jobProgress(job, now);
-  if (!p.active) return null;
-
-  const eta = formatEta(p.etaSeconds);
+  const headingId = `job-progress-${job.id}`;
 
   return (
-    <div className="mt-6 rounded-xl border border-line p-5">
-      {/* Stepper */}
-      <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-        {STAGES.map((s, i) => {
-          const state = i < p.stageIndex ? "done" : i === p.stageIndex ? "current" : "todo";
+    <section aria-labelledby={headingId} className="mt-6 rounded-xl border border-line p-5">
+      <div role="status" aria-live="polite" aria-atomic="true">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Current stage</p>
+        <h2 id={headingId} className="mt-1 text-lg font-semibold">
+          {progress.label}
+        </h2>
+        <p className="mt-1 max-w-2xl text-sm text-muted">{progress.description}</p>
+      </div>
+
+      <ol aria-label="Processing stages" className="mt-5 grid gap-2 sm:grid-cols-5">
+        {STAGES.map((stage) => {
+          const current = stage.key === progress.stage;
           return (
-            <li key={s.key} className="flex items-center gap-2">
+            <li
+              key={stage.key}
+              aria-current={current ? "step" : undefined}
+              className={`flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-sm ${
+                current
+                  ? "border-brand bg-brand/10 font-medium text-ink"
+                  : "border-line text-muted"
+              }`}
+            >
               <span
-                className={`grid h-5 w-5 place-items-center rounded-full text-[10px] ${
-                  state === "done"
-                    ? "bg-brand text-brand-ink"
-                    : state === "current"
-                      ? "bg-brand/15 text-brand ring-1 ring-brand"
-                      : "bg-paper-2 text-muted"
-                }`}
-              >
-                {state === "done" ? "✓" : i + 1}
+                aria-hidden="true"
+                className={`h-2 w-2 shrink-0 rounded-full ${current ? "bg-brand" : "bg-line"}`}
+              />
+              <span>
+                {stage.label}
               </span>
-              <span className={state === "todo" ? "text-muted" : "text-ink"}>{s.label}</span>
-              {i < STAGES.length - 1 && <span className="mx-1 text-line">—</span>}
+              {current && (
+                <span className="ml-auto text-xs font-semibold text-brand">Current</span>
+              )}
             </li>
           );
         })}
       </ol>
-
-      {/* Progress bar */}
-      <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-paper-2">
-        <div
-          className="h-full rounded-full bg-brand transition-[width] duration-1000 ease-linear"
-          style={{ width: `${Math.round(p.fraction * 100)}%` }}
-        />
-      </div>
-      <p className="mt-2 text-sm text-muted">
-        {STAGES[p.stageIndex]?.label}
-        {eta ? ` · ${eta}` : ""} · this page updates on its own
+      <p className="mt-3 text-xs text-muted">
+        This page updates when the service reports a new stage. Some sources can skip a stage.
       </p>
-    </div>
+    </section>
   );
 }

@@ -5,7 +5,8 @@ import { useContentCtx } from "./ContentProvider";
 
 // Renders an editable content string by id ("namespace.key"). Outside admin edit
 // mode it's just text (no wrapper element), so it can sit inline anywhere. In
-// edit mode it becomes a click-to-edit affordance that opens the inline editor.
+// edit mode it gets a non-interactive marker. ContentProvider delegates clicks
+// from the document so this never creates a button inside a link or button.
 export function T({
   id,
   vars,
@@ -13,7 +14,7 @@ export function T({
   id: string;
   vars?: Record<string, string | number>;
 }) {
-  const { content, isAdmin, editing, openEdit } = useContentCtx();
+  const { content, isAdmin, editing } = useContentCtx();
   const dot = id.indexOf(".");
   const ns = id.slice(0, dot);
   const key = id.slice(dot + 1);
@@ -24,15 +25,11 @@ export function T({
 
   return (
     <span
-      role="button"
-      tabIndex={0}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openEdit(ns, key, (e.currentTarget as HTMLElement).getBoundingClientRect());
-      }}
+      data-content-edit=""
+      data-content-ns={ns}
+      data-content-key={key}
       title={`Edit ${id}`}
-      className="cursor-text rounded-sm decoration-brand/60 underline decoration-dotted underline-offset-2 hover:bg-brand/10"
+      className="cursor-text rounded-sm decoration-brand underline decoration-dotted underline-offset-4 hover:bg-paper-2"
     >
       {text}
     </span>

@@ -1,28 +1,35 @@
 import { redirect } from "next/navigation";
 import AuthForm from "@/components/AuthForm";
-import { fill } from "@/lib/content";
+import { T } from "@/components/T";
 import { getCurrentUser } from "@/lib/auth";
-import { getContent, getSettings } from "@/lib/settings";
+import { safeReturnPath } from "@/lib/return-path";
+import { getSettings } from "@/lib/settings";
 import { signup } from "../actions";
 
-export const metadata = { title: "Sign up — Transcribe" };
+export const metadata = { title: "Sign up" };
 
-export default async function SignupPage() {
-  if (await getCurrentUser()) redirect("/dashboard");
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
+  const returnTo = safeReturnPath(next, "") || undefined;
+  if (await getCurrentUser()) redirect(returnTo ?? "/dashboard");
   const { signupBonusCredits } = await getSettings();
-  const c = (await getContent()).auth;
   return (
     <AuthForm
       title={
         signupBonusCredits > 0
-          ? fill(c.signupTitleBonus, { credits: signupBonusCredits })
-          : c.signupTitle
+          ? <T id="auth.signupTitleBonus" vars={{ credits: signupBonusCredits }} />
+          : <T id="auth.signupTitle" />
       }
-      cta={c.signupCta}
+      cta={<T id="auth.signupCta" />}
       action={signup}
-      altText={c.signupAlt}
-      altHref="/login"
-      altLink={c.signupAltLink}
+      altText={<T id="auth.signupAlt" />}
+      altHref={returnTo ? `/login?next=${encodeURIComponent(returnTo)}` : "/login"}
+      altLink={<T id="auth.signupAltLink" />}
+      returnTo={returnTo}
     />
   );
 }

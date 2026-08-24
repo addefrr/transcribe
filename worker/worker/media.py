@@ -16,8 +16,23 @@ def _ydl_opts(extra: dict) -> dict:
         "noprogress": True,
         "noplaylist": True,
         "socket_timeout": 30,
+        "retries": 3,
+        "extractor_retries": 3,
+        "fragment_retries": 3,
         **extra,
     }
+
+
+def _run_command(args: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise JobError("Media processing timed out. Try a shorter or different file.") from exc
 
 
 def probe_url(url: str) -> tuple[Optional[float], Optional[str], Optional[str]]:
@@ -82,8 +97,14 @@ def expand_playlist(url: str) -> list[dict]:
                 "duration": float(duration) if duration else None,
             }
         )
-        if len(items) >= config.MAX_PLAYLIST_ITEMS:
-            break
+        # Never silently truncate a playlist: the customer must see and confirm
+        # the complete item count and charge. Reading one item beyond the cap is
+        # enough to reject it without walking an unbounded lazy playlist.
+        if len(items) > config.MAX_PLAYLIST_ITEMS:
+            raise JobError(
+                f"This playlist has more than {config.MAX_PLAYLIST_ITEMS} playable items. "
+                "Use a smaller playlist or submit individual videos."
+            )
     if not items:
         raise JobError("That playlist has no playable videos.")
     return items
@@ -129,10 +150,9 @@ def _measure_by_decode(path: str) -> Optional[float]:
     container header has no duration (e.g. browser MediaRecorder WebM/Opus,
     which is written as a live stream and never gets a finalized duration).
     Decodes audio only to /dev/null and reads ffmpeg's final `time=` stat."""
-    proc = subprocess.run(
+    proc = _run_command(
         ["ffmpeg", "-nostdin", "-v", "error", "-stats", "-i", path, "-vn", "-f", "null", "-"],
-        capture_output=True,
-        text=True,
+        config.MEDIA_COMMAND_TIMEOUT_SECONDS,
     )
     if proc.returncode != 0:
         return None
@@ -148,14 +168,13 @@ def probe_file(path: str) -> float:
     """Exact duration in seconds — authoritative for billing. Reads the fast
     container metadata first, then falls back to a full decode for files whose
     header omits the duration."""
-    proc = subprocess.run(
+    proc = _run_command(
         [
             "ffprobe", "-v", "error",
             "-show_entries", "format=duration",
             "-of", "json", path,
         ],
-        capture_output=True,
-        text=True,
+        min(120, config.MEDIA_COMMAND_TIMEOUT_SECONDS),
     )
     if proc.returncode != 0:
         raise JobError("File is not a readable audio/video file.")
@@ -178,7 +197,7 @@ def segment(src: str, workdir: str, seconds: int) -> list[tuple[float, str]]:
     offsets come from each chunk's real probed duration, so timestamps stitched
     back with them don't drift even if ffmpeg snaps cuts to packet boundaries."""
     pattern = os.path.join(workdir, "chunk_%04d.ogg")
-    proc = subprocess.run(
+    proc = _run_command(
         [
             "ffmpeg", "-y", "-v", "error",
             "-i", src,
@@ -188,8 +207,7 @@ def segment(src: str, workdir: str, seconds: int) -> list[tuple[float, str]]:
             "-reset_timestamps", "1", "-c", "copy",
             pattern,
         ],
-        capture_output=True,
-        text=True,
+        config.MEDIA_COMMAND_TIMEOUT_SECONDS,
     )
     if proc.returncode != 0:
         raise JobError(f"Audio segmentation failed: {proc.stderr.strip()[:500]}")
@@ -208,15 +226,14 @@ def normalize(src: str, workdir: str) -> str:
     """Extract mono Opus audio — small enough to ship to a GPU endpoint quickly,
     and directly decodable by faster-whisper."""
     out = os.path.join(workdir, "audio.ogg")
-    proc = subprocess.run(
+    proc = _run_command(
         [
             "ffmpeg", "-y", "-v", "error",
             "-i", src,
             "-vn", "-ac", "1", "-c:a", "libopus", "-b:a", "32k",
             out,
         ],
-        capture_output=True,
-        text=True,
+        config.MEDIA_COMMAND_TIMEOUT_SECONDS,
     )
     if proc.returncode != 0:
         raise JobError(f"Audio extraction failed: {proc.stderr.strip()[:500]}")

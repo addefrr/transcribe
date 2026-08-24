@@ -1,7 +1,9 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Transcribe extension</title>
     <style>
       :root { color-scheme: light dark; }
       body {
@@ -11,9 +13,10 @@
         padding: 14px;
       }
       h1 { font-size: 15px; margin: 0 0 10px; }
-      label { display: block; font-size: 11px; color: #666; margin: 8px 0 2px; }
+      label { display: block; font-size: 12px; color: #5f5f68; margin: 10px 0 4px; }
       input, select {
         width: 100%;
+        min-height: 40px;
         box-sizing: border-box;
         padding: 6px 8px;
         border: 1px solid #ccc;
@@ -26,6 +29,7 @@
       .row > * { flex: 1; }
       button {
         width: 100%;
+        min-height: 44px;
         margin-top: 10px;
         padding: 8px;
         border: 0;
@@ -38,11 +42,23 @@
       }
       button.secondary { background: transparent; border: 1px solid #ccc; color: inherit; }
       button:disabled { opacity: 0.5; cursor: default; }
-      #status { margin-top: 10px; font-size: 12px; color: #444; min-height: 16px; }
-      #status a { color: #5b50e0; }
-      .muted { color: #888; font-size: 11px; }
+      :where(button, input, select, summary, a):focus-visible {
+        outline: 3px solid #4338ca;
+        outline-offset: 2px;
+      }
+      #status { margin-top: 10px; font-size: 12px; color: #3f3f46; min-height: 18px; }
+      #status a { color: #4f46c7; }
+      .muted { color: #62626b; font-size: 12px; }
       hr { border: 0; border-top: 1px solid #eee; margin: 12px 0; }
-      details summary { cursor: pointer; color: #666; font-size: 11px; }
+      details summary { cursor: pointer; color: #5f5f68; font-size: 12px; padding: 8px 0; }
+      @media (prefers-color-scheme: dark) {
+        label, details summary, .muted { color: #b5b5bf; }
+        #status { color: #dedee3; }
+        #status a { color: #aaa4ff; }
+        input, select, button.secondary { border-color: #62626b; }
+        hr { border-color: #45454d; }
+        :where(button, input, select, summary, a):focus-visible { outline-color: #b7b1ff; }
+      }
     </style>
   </head>
   <body>
@@ -50,27 +66,27 @@
 
     <div id="setup" hidden>
       <p class="muted">Connect your account to get started.</p>
-      <label>API base URL</label>
-      <input id="apiBase" placeholder="http://localhost:3000" />
-      <label>API token</label>
-      <input id="token" type="password" placeholder="sk_…" />
+      <label for="apiBase">API base URL</label>
+      <input id="apiBase" type="url" inputmode="url" autocomplete="url" placeholder="http://localhost:3000" />
+      <label for="token">API token</label>
+      <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="sk_…" />
       <button id="saveSetup">Save</button>
       <p class="muted" style="margin-top: 8px">
-        Create a token on your account's <b>API tokens</b> page (footer → Extension).
+        Create a token on your account's <strong>API tokens</strong> page (footer → Extension).
       </p>
     </div>
 
     <div id="main" hidden>
       <div class="row">
         <div>
-          <label>Quality</label>
+          <label for="tier">Quality</label>
           <select id="tier">
             <option value="standard">Standard</option>
             <option value="premium">Premium</option>
           </select>
         </div>
         <div>
-          <label>Language</label>
+          <label for="language">Language</label>
           <select id="language">
             <option value="">Auto-detect</option>
           </select>
@@ -81,15 +97,15 @@
       <button id="stop" class="secondary" hidden>■ Stop &amp; transcribe</button>
       <button id="urlJob" class="secondary" hidden>Transcribe the playing media (link)</button>
 
-      <div id="status"></div>
+      <div id="status" role="status" aria-live="polite" aria-atomic="true"></div>
 
       <hr />
       <details>
         <summary>Settings</summary>
-        <label>API base URL</label>
-        <input id="apiBase2" />
-        <label>API token</label>
-        <input id="token2" type="password" placeholder="leave blank to keep" />
+        <label for="apiBase2">API base URL</label>
+        <input id="apiBase2" type="url" inputmode="url" autocomplete="url" />
+        <label for="token2">API token</label>
+        <input id="token2" type="password" autocomplete="off" spellcheck="false" placeholder="leave blank to keep" />
         <button id="save2" class="secondary">Update</button>
       </details>
     </div>

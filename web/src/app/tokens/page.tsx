@@ -4,7 +4,7 @@ import { listApiTokens } from "@/lib/apiTokens";
 import { getCurrentUser } from "@/lib/auth";
 import { APP_URL } from "@/lib/stripe";
 
-export const metadata = { title: "Browser extension & API — Transcribe" };
+export const metadata = { title: "Browser extension & API" };
 
 export default async function TokensPage() {
   const user = await getCurrentUser();
@@ -20,7 +20,7 @@ export default async function TokensPage() {
       </p>
 
       <div className="mt-8 max-w-3xl">
-        <TokenManager tokens={tokens} />
+        <TokenManager tokens={tokens} emailVerified={user.emailVerified} />
       </div>
 
       <div className="mt-12 max-w-3xl rounded-xl border border-line p-6">
@@ -40,7 +40,7 @@ export default async function TokensPage() {
         <p className="mt-3 text-sm text-muted">
           Then play any audio or video in a tab, click the extension, and choose a quality level to
           transcribe it. The result appears in{" "}
-          <a href="/dashboard" className="text-brand hover:underline">
+          <a href="/dashboard" className="text-brand underline underline-offset-4">
             My transcriptions
           </a>
           , billed to your account just like uploads.

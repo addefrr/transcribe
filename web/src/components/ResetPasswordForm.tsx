@@ -1,38 +1,59 @@
 "use client";
 
-import { useActionState } from "react";
-import { useContent } from "@/components/ContentProvider";
+import { useActionState, useId } from "react";
 import { resetPassword } from "@/app/(auth)/actions";
+import { T } from "@/components/T";
 
 export default function ResetPasswordForm({ token }: { token: string }) {
   const [state, formAction, pending] = useActionState(resetPassword, {});
-  const t = useContent().auth;
+  const passwordId = useId();
+  const hintId = useId();
+  const errorId = useId();
+
   return (
-    <div className="mx-auto mt-16 w-full max-w-sm rounded-xl border border-line p-8">
-      <h1 className="mb-6 text-2xl font-semibold">{t.resetTitle}</h1>
-      <form action={formAction} className="space-y-4">
+    <div className="mx-auto mt-10 w-full max-w-sm rounded-xl border border-line p-5 sm:mt-16 sm:p-8">
+      <h1 className="mb-6 text-2xl font-semibold tracking-tight">
+        <T id="auth.resetTitle" />
+      </h1>
+      <form action={formAction} aria-busy={pending} className="space-y-4">
         <input type="hidden" name="token" value={token} />
-        <label className="block">
-          <span className="mb-1 block text-sm text-muted">
-            {t.passwordLabel} <span className="text-muted">{t.passwordHint}</span>
-          </span>
+        <div>
+          <label htmlFor={passwordId} className="mb-1.5 block text-sm font-medium">
+            <T id="auth.passwordLabel" />
+          </label>
           <input
+            id={passwordId}
             name="password"
             type="password"
             required
             minLength={8}
+            maxLength={256}
             autoComplete="new-password"
             autoFocus
-            className="w-full rounded-md border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-brand"
+            aria-describedby={`${hintId}${state.error ? ` ${errorId}` : ""}`}
+            className="min-h-11 w-full rounded-md border border-line bg-transparent px-3 text-base focus:border-brand"
           />
-        </label>
-        {state.error && <p className="text-sm text-red-600">{state.error}</p>}
+          <p id={hintId} className="mt-1.5 text-sm text-muted">
+            <T id="auth.passwordHint" />
+          </p>
+        </div>
+
+        {state.error && (
+          <p
+            id={errorId}
+            role="alert"
+            className="rounded-md bg-danger-soft px-3 py-2 text-sm text-danger"
+          >
+            {state.error}
+          </p>
+        )}
+
         <button
           type="submit"
           disabled={pending}
-          className="w-full rounded-md bg-brand py-2 text-sm font-medium text-brand-ink hover:opacity-90 disabled:opacity-50"
+          className="min-h-11 w-full rounded-md bg-brand px-4 text-sm font-semibold text-brand-ink hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
         >
-          {pending ? "…" : t.resetCta}
+          {pending ? <T id="auth.updatingPassword" /> : <T id="auth.resetCta" />}
         </button>
       </form>
     </div>

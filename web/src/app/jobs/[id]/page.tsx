@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import JobDetail from "@/components/JobDetail";
 import { getCurrentUser } from "@/lib/auth";
 
-export const metadata = { title: "Job — Transcribe" };
+export const metadata = { title: "Transcript job" };
 
 export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();

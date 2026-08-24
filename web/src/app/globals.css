@@ -4,8 +4,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* Semantic design tokens — an editorial, near-monochrome system with one
-   restrained accent. Utilities resolve these vars, so they theme automatically:
-   bg-paper, bg-paper-2, text-ink, text-muted, border-line, bg-brand, text-brand. */
+   restrained accent. Utilities resolve these vars, so they theme automatically. */
 @theme inline {
   --color-paper: var(--paper);
   --color-paper-2: var(--paper-2);
@@ -14,8 +13,16 @@
   --color-line: var(--line);
   --color-brand: var(--brand);
   --color-brand-ink: var(--brand-ink);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 :root {
@@ -26,6 +33,15 @@
   --line: #e7e7ea;
   --brand: #5b50e0;
   --brand-ink: #ffffff;
+  --success: #157347;
+  --success-soft: #edf8f2;
+  --danger: #b42318;
+  --danger-soft: #fff1f0;
+  --warning: #825500;
+  --warning-soft: #fff7df;
+  --info: #1d4ed8;
+  --info-soft: #eff6ff;
+  --focus: #4338ca;
 }
 
 .dark {
@@ -36,6 +52,15 @@
   --line: #262629;
   --brand: #8b82ff;
   --brand-ink: #0a0a0b;
+  --success: #65d6a3;
+  --success-soft: #10271d;
+  --danger: #ff8a83;
+  --danger-soft: #321715;
+  --warning: #f6c453;
+  --warning-soft: #2c230f;
+  --info: #93c5fd;
+  --info-soft: #10213b;
+  --focus: #b7b1ff;
 }
 
 html {
@@ -48,8 +73,44 @@ html.dark {
 body {
   background: var(--paper);
   color: var(--ink);
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* Keyboard focus must remain visible in every theme. This deliberately beats
+   component-level `outline-none` utilities used by native form controls. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+:where(input, select, textarea):focus-visible {
+  outline-offset: 1px;
+}
+
+/* Use on compact-looking controls without shrinking their actual hit area. */
+.tap-target {
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+}
+
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  translate: 0 -200%;
+  border-radius: 0.5rem;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 0.65rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.skip-link:focus-visible {
+  translate: 0;
 }
 
 ::selection {
@@ -59,4 +120,100 @@ body {
 /* Thin, restrained scrollbar in dark. */
 * {
   scrollbar-color: var(--line) transparent;
+}
+
+@layer components {
+  .page-stack {
+    @apply space-y-10;
+  }
+
+  .page-title {
+    @apply text-balance text-3xl font-semibold leading-tight tracking-tight sm:text-4xl;
+  }
+
+  .page-intro {
+    @apply mt-3 max-w-2xl text-base leading-7 text-muted;
+  }
+
+  .section-title {
+    @apply text-xl font-semibold tracking-tight sm:text-2xl;
+  }
+
+  .section-rule {
+    @apply border-t border-line pt-7;
+  }
+
+  .eyebrow {
+    @apply mb-2 font-mono text-xs font-semibold tracking-wide text-muted;
+  }
+
+  .field-label {
+    @apply block text-sm font-medium text-ink;
+  }
+
+  .field-input {
+    @apply min-h-11 rounded-md border border-line bg-transparent px-3 py-2 text-base text-ink disabled:cursor-not-allowed disabled:bg-paper-2 disabled:text-muted;
+  }
+
+  .field-error {
+    @apply mt-1 text-sm text-danger;
+  }
+
+  .button-primary {
+    @apply inline-flex min-h-11 items-center justify-center rounded-md bg-ink px-4 py-2 text-sm font-semibold text-paper transition hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .button-secondary {
+    @apply inline-flex min-h-11 items-center justify-center rounded-md border border-line bg-paper px-4 py-2 text-sm font-semibold text-ink transition hover:border-ink disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .button-danger {
+    @apply inline-flex min-h-11 items-center justify-center rounded-md bg-danger px-4 py-2 text-sm font-semibold text-paper transition hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .button-tab {
+    @apply inline-flex min-h-11 items-center justify-center rounded-md border border-line bg-paper px-4 py-2 text-sm font-medium text-muted transition hover:border-ink hover:text-ink;
+  }
+
+  .button-tab-active {
+    @apply border-ink bg-paper-2 font-semibold text-ink;
+  }
+
+  .text-link {
+    @apply font-medium text-brand underline underline-offset-4 transition hover:decoration-2;
+  }
+
+  .status-success,
+  .status-error,
+  .status-warning,
+  .status-info {
+    @apply rounded-md border px-4 py-3 text-sm leading-6;
+  }
+
+  .status-success {
+    @apply border-success/30 bg-success-soft text-success;
+  }
+
+  .status-error {
+    @apply border-danger/30 bg-danger-soft text-danger;
+  }
+
+  .status-warning {
+    @apply border-warning/30 bg-warning-soft text-warning;
+  }
+
+  .status-info {
+    @apply border-info/30 bg-info-soft text-info;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

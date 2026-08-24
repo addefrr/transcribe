@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getContent, getSettings } from "@/lib/settings";
 import SettingsForm from "./SettingsForm";
 
-export const metadata = { title: "Settings — Transcribe" };
+export const metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage({
@@ -31,8 +31,12 @@ export default async function SettingsPage({
         Changes apply within a few seconds and never affect jobs already in progress.
       </p>
       {saved && (
-        <p className="mt-4 rounded-md bg-green-100 px-4 py-2 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">
-          Saved.
+        <p
+          className="mt-4 rounded-md bg-success-soft px-4 py-3 text-sm text-success"
+          role="status"
+          aria-live="polite"
+        >
+          Settings saved.
         </p>
       )}
       <SettingsForm settings={s} content={content} />

@@ -1,7 +1,13 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { randomUUID } from "node:crypto";
@@ -51,6 +57,46 @@ export type PreparedUpload = {
   mode: "local" | "s3";
 };
 
+type LocalObjectRange = {
+  start: number;
+  end: number;
+};
+
+export type ReadObjectResult =
+  | { redirect: string }
+  | {
+      stream: ReadableStream<Uint8Array>;
+      size: number;
+      range: LocalObjectRange | null;
+    }
+  | { unsatisfiable: true; size: number };
+
+function requestedRange(header: string, size: number): LocalObjectRange | null {
+  // Retained audio only needs one byte range. Rejecting multiple ranges avoids
+  // multipart response assembly while still supporting browser media seeking.
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(header.trim());
+  if (!match || (!match[1] && !match[2]) || size <= 0) return null;
+
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return null;
+    return { start: Math.max(0, size - suffixLength), end: size - 1 };
+  }
+
+  const start = Number(match[1]);
+  const requestedEnd = match[2] ? Number(match[2]) : size - 1;
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(requestedEnd) ||
+    start < 0 ||
+    start >= size ||
+    requestedEnd < start
+  ) {
+    return null;
+  }
+  return { start, end: Math.min(requestedEnd, size - 1) };
+}
+
 /**
  * Fetch a stored object (e.g. retained audio) for streaming back to the client.
  * `key` comes from the DB, never user input. Returns a web ReadableStream for
@@ -58,7 +104,8 @@ export type PreparedUpload = {
  */
 export async function readObject(
   key: string,
-): Promise<{ stream: ReadableStream<Uint8Array> } | { redirect: string } | null> {
+  rangeHeader?: string | null,
+): Promise<ReadObjectResult | null> {
   if (STORAGE_DRIVER === "s3") {
     const url = await getSignedUrl(
       getS3(),
@@ -71,13 +118,20 @@ export async function readObject(
   const full = path.resolve(UPLOAD_DIR, key);
   if (full !== UPLOAD_DIR && !full.startsWith(UPLOAD_DIR + path.sep)) return null;
   try {
-    const node = createReadStream(full);
+    const size = (await stat(full)).size;
+    const range = rangeHeader ? requestedRange(rangeHeader, size) : null;
+    if (rangeHeader && !range) return { unsatisfiable: true, size };
+    const node = createReadStream(full, range ?? undefined);
     // Surface a missing file as null rather than a stream that errors later.
     await new Promise<void>((resolve, reject) => {
       node.once("open", () => resolve());
       node.once("error", reject);
     });
-    return { stream: Readable.toWeb(node) as ReadableStream<Uint8Array> };
+    return {
+      stream: Readable.toWeb(node) as ReadableStream<Uint8Array>,
+      size,
+      range,
+    };
   } catch {
     return null;
   }
@@ -86,6 +140,7 @@ export async function readObject(
 export async function prepareUpload(
   filename: string,
   contentType: string,
+  sizeBytes: number,
 ): Promise<PreparedUpload> {
   const key = makeKey(filename);
   if (STORAGE_DRIVER === "s3") {
@@ -95,6 +150,7 @@ export async function prepareUpload(
         Bucket: process.env.S3_BUCKET ?? "transcribe",
         Key: key,
         ContentType: contentType || "application/octet-stream",
+        ContentLength: sizeBytes,
       }),
       { expiresIn: 3600 },
     );
@@ -107,6 +163,7 @@ export async function prepareUpload(
 export async function saveLocalUpload(
   key: string,
   body: ReadableStream<Uint8Array>,
+  expectedBytes: number,
 ): Promise<void> {
   if (STORAGE_DRIVER !== "local") throw new Error("local uploads are disabled");
   if (!isValidUploadKey(key)) throw new Error("invalid upload key");
@@ -126,5 +183,47 @@ export async function saveLocalUpload(
       controller.enqueue(chunk);
     },
   });
-  await body.pipeThrough(counter).pipeTo(sink);
+  try {
+    await body.pipeThrough(counter).pipeTo(sink);
+    if (written !== expectedBytes) {
+      throw new Error("uploaded size did not match the declared file size");
+    }
+  } catch (error) {
+    await rm(dest, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+/** Verify the stored object has the expected size before a job can claim it. */
+export async function storedObjectSize(key: string): Promise<number | null> {
+  if (STORAGE_DRIVER === "s3") {
+    try {
+      const head = await getS3().send(
+        new HeadObjectCommand({ Bucket: process.env.S3_BUCKET ?? "transcribe", Key: key }),
+      );
+      return typeof head.ContentLength === "number" ? head.ContentLength : null;
+    } catch {
+      return null;
+    }
+  }
+  const full = path.resolve(UPLOAD_DIR, key);
+  if (full !== UPLOAD_DIR && !full.startsWith(UPLOAD_DIR + path.sep)) return null;
+  try {
+    return (await stat(full)).size;
+  } catch {
+    return null;
+  }
+}
+
+/** Best-effort object deletion for account/job cleanup and abandoned uploads. */
+export async function deleteObject(key: string): Promise<void> {
+  if (STORAGE_DRIVER === "s3") {
+    await getS3().send(
+      new DeleteObjectCommand({ Bucket: process.env.S3_BUCKET ?? "transcribe", Key: key }),
+    );
+    return;
+  }
+  const full = path.resolve(UPLOAD_DIR, key);
+  if (full !== UPLOAD_DIR && !full.startsWith(UPLOAD_DIR + path.sep)) return;
+  await rm(full, { force: true });
 }

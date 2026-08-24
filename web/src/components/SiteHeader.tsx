@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { logout } from "@/app/(auth)/actions";
-import { useContent } from "./ContentProvider";
+import { T } from "./T";
 import ThemeToggle from "./ThemeToggle";
 
 type Props = {
@@ -14,28 +14,75 @@ type Props = {
   hasSubscription: boolean;
 };
 
+/** Audio on the left, transcript lines on the right: a product-derived mark. */
+export function BrandMark({ className = "h-8 w-8" }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`grid shrink-0 place-items-center rounded-lg bg-ink text-paper ${className}`}
+    >
+      <svg
+        viewBox="0 0 28 28"
+        className="h-[72%] w-[72%]"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        focusable="false"
+      >
+        <path d="M4.5 11v6M7.5 8v12M10.5 10v8" strokeWidth="1.8" />
+        <path d="M15 9h8M15 14h8M15 19h5.5" strokeWidth="1.6" />
+      </svg>
+    </span>
+  );
+}
+
 export default function SiteHeader({ loggedIn, creditBalance, admin, hasSubscription }: Props) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const t = useContent().nav;
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
-  const creditPill = hasSubscription ? t.subscribed : `${creditBalance} ${t.creditsLabel}`;
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      menuButtonRef.current?.focus();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
+  const creditPill = hasSubscription ? (
+    <T id="nav.subscribed" />
+  ) : (
+    <>
+      {creditBalance} <T id="nav.creditsLabel" />
+    </>
+  );
   const links = loggedIn
     ? [
-        { href: "/dashboard", label: t.myTranscriptions },
-        { href: "/plans", label: t.plans },
-        ...(admin ? [{ href: "/developer", label: t.developer }] : []),
+        { href: "/dashboard", id: "nav.myTranscriptions" },
+        { href: "/plans", id: "nav.plans" },
+        { href: "/account", id: "nav.account" },
+        ...(admin ? [{ href: "/developer", id: "nav.developer" }] : []),
       ]
-    : [];
+    : [{ href: "/plans", id: "nav.plans" }];
 
-  const navLink = (href: string, label: string) => {
+  const navLink = (href: string, label: React.ReactNode, mobile = false) => {
     const active = pathname === href || pathname.startsWith(href + "/");
     return (
       <Link
         key={href}
         href={href}
+        aria-current={active ? "page" : undefined}
         onClick={() => setOpen(false)}
-        className={`text-sm transition ${active ? "text-ink" : "text-muted hover:text-ink"}`}
+        className={`inline-flex min-h-11 items-center text-sm transition ${
+          mobile ? "w-full rounded-md px-2" : ""
+        } ${
+          active
+            ? "font-semibold text-ink underline decoration-2 decoration-brand underline-offset-8"
+            : "text-muted hover:text-ink"
+        }`}
       >
         {label}
       </Link>
@@ -43,97 +90,127 @@ export default function SiteHeader({ loggedIn, creditBalance, admin, hasSubscrip
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-paper/80 backdrop-blur">
-      <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-        <Link
-          href={loggedIn ? "/dashboard" : "/"}
-          className="flex items-center gap-2 font-semibold tracking-tight"
-        >
-          <span className="grid h-7 w-7 place-items-center rounded-md bg-ink text-[13px] text-paper">
-            T
-          </span>
-          {t.brand}
-        </Link>
-
-        {/* Desktop nav */}
-        <div className="hidden items-center gap-6 md:flex">
-          {links.map((l) => navLink(l.href, l.label))}
-          {loggedIn ? (
-            <>
-              <Link
-                href="/credits"
-                className="rounded-full border border-line px-3 py-1 text-sm text-muted transition hover:text-ink"
-              >
-                {creditPill}
-              </Link>
-              <ThemeToggle />
-              <form action={logout}>
-                <button type="submit" className="text-sm text-muted transition hover:text-ink">
-                  {t.logOut}
-                </button>
-              </form>
-            </>
-          ) : (
-            <>
-              <Link href="/login" className="text-sm text-muted transition hover:text-ink">
-                {t.logIn}
-              </Link>
-              <ThemeToggle />
-              <Link
-                href="/signup"
-                className="rounded-lg bg-ink px-3.5 py-2 text-sm font-medium text-paper transition hover:opacity-90"
-              >
-                {t.getStarted}
-              </Link>
-            </>
-          )}
-        </div>
-
-        {/* Mobile controls */}
-        <div className="flex items-center gap-2 md:hidden">
-          <ThemeToggle />
-          <button
-            type="button"
-            aria-label="Menu"
-            onClick={() => setOpen((o) => !o)}
-            className="grid h-9 w-9 place-items-center rounded-lg border border-line text-ink"
+    <header className="sticky top-0 z-40 border-b border-line bg-paper">
+      <nav aria-label="Primary" className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="flex min-h-16 items-center justify-between gap-4">
+          <Link
+            href={loggedIn ? "/dashboard" : "/"}
+            aria-label={loggedIn ? "Transcribe dashboard" : "Transcribe home"}
+            className="inline-flex min-h-11 items-center gap-2.5 font-semibold tracking-tight"
           >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-              {open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
-            </svg>
-          </button>
-        </div>
-      </nav>
+            <BrandMark />
+            <T id="nav.brand" />
+          </Link>
 
-      {/* Mobile dropdown */}
-      {open && (
-        <div className="border-t border-line px-4 py-3 md:hidden">
-          <div className="flex flex-col gap-3">
-            {links.map((l) => navLink(l.href, l.label))}
+          <div className="hidden items-center gap-5 md:flex">
+            {links.map((link) => navLink(link.href, <T id={link.id} />))}
             {loggedIn ? (
               <>
-                {navLink("/credits", creditPill)}
+                <Link
+                  href="/credits"
+                  aria-current={pathname.startsWith("/credits") ? "page" : undefined}
+                  className={`inline-flex min-h-11 items-center rounded-full border px-3 text-sm transition ${
+                    pathname.startsWith("/credits")
+                      ? "border-brand font-semibold text-ink"
+                      : "border-line text-muted hover:border-ink hover:text-ink"
+                  }`}
+                >
+                  {creditPill}
+                </Link>
+                <ThemeToggle />
                 <form action={logout}>
-                  <button type="submit" className="text-sm text-muted transition hover:text-ink">
-                    {t.logOut}
+                  <button
+                    type="submit"
+                    className="inline-flex min-h-11 items-center px-1 text-sm text-muted transition hover:text-ink"
+                  >
+                    <T id="nav.logOut" />
                   </button>
                 </form>
               </>
             ) : (
               <>
-                {navLink("/login", t.logIn)}
+                <Link
+                  href="/login"
+                  className="inline-flex min-h-11 items-center px-1 text-sm text-muted transition hover:text-ink"
+                >
+                  <T id="nav.logIn" />
+                </Link>
+                <ThemeToggle />
+                <Link
+                  href="/signup"
+                  className="inline-flex min-h-11 items-center rounded-lg bg-ink px-4 text-sm font-semibold text-paper transition hover:opacity-90"
+                >
+                  <T id="nav.getStarted" />
+                </Link>
+              </>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1 md:hidden">
+            <ThemeToggle />
+            <button
+              ref={menuButtonRef}
+              type="button"
+              aria-label={open ? "Close menu" : "Open menu"}
+              aria-expanded={open}
+              aria-controls="mobile-primary-menu"
+              onClick={() => setOpen((current) => !current)}
+              className="tap-target grid place-items-center rounded-lg border border-line text-ink"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                focusable="false"
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                {open ? (
+                  <path d="M6 6l12 12M18 6L6 18" />
+                ) : (
+                  <path d="M4 7h16M4 12h16M4 17h16" />
+                )}
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div
+          id="mobile-primary-menu"
+          hidden={!open}
+          className="border-t border-line py-3 md:hidden"
+        >
+          <div className="flex flex-col gap-1">
+            {links.map((link) => navLink(link.href, <T id={link.id} />, true))}
+            {loggedIn ? (
+              <>
+                {navLink("/credits", creditPill, true)}
+                <form action={logout}>
+                  <button
+                    type="submit"
+                    className="inline-flex min-h-11 w-full items-center rounded-md px-2 text-left text-sm text-muted hover:bg-paper-2 hover:text-ink"
+                  >
+                    <T id="nav.logOut" />
+                  </button>
+                </form>
+              </>
+            ) : (
+              <>
+                {navLink("/login", <T id="nav.logIn" />, true)}
                 <Link
                   href="/signup"
                   onClick={() => setOpen(false)}
-                  className="w-fit rounded-lg bg-ink px-3.5 py-2 text-sm font-medium text-paper"
+                  className="mt-1 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-ink px-4 text-sm font-semibold text-paper"
                 >
-                  {t.getStarted}
+                  <T id="nav.getStarted" />
                 </Link>
               </>
             )}
           </div>
         </div>
-      )}
+      </nav>
     </header>
   );
 }

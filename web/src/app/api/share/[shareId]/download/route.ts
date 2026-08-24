@@ -2,6 +2,8 @@ import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jobs, transcripts } from "@/lib/schema";
+import { isTier } from "@/lib/pricing";
+import { getSettings } from "@/lib/settings";
 import { segmentsToSrt, segmentsToTxt, segmentsToVtt } from "@/lib/subtitles";
 
 const FORMATS = {
@@ -32,6 +34,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ shareId: st
     .limit(1);
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const settings = await getSettings();
+  const features = isTier(row.job.tier)
+    ? settings.tierFeatures[row.job.tier]
+    : settings.tierFeatures.standard;
+  const exportAllowed = format === "txt" ? features.textExport : features.subtitleExport;
+  if (!features.publicSharing || !exportAllowed) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const { transcript } = row;
   const content =
     format === "txt"
@@ -45,6 +56,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ shareId: st
     headers: {
       "content-type": `${FORMATS[format].mime}; charset=utf-8`,
       "content-disposition": `attachment; filename="${base.replace(/[^\w.-]+/g, "_")}.${format}"`,
+      "cache-control": "no-store",
     },
   });
 }

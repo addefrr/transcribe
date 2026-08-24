@@ -2,19 +2,21 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useContent } from "@/components/ContentProvider";
-import { fill } from "@/lib/content";
+import { T } from "@/components/T";
 
 // Records mic audio in the browser (MediaRecorder → Opus/WebM) and hands the
 // result back as a File, which the job form then uploads like any other file.
 export default function Recorder({ onRecorded }: { onRecorded: (file: File | null) => void }) {
   const t = useContent().recorder;
   const [recording, setRecording] = useState(false);
+  const [requesting, setRequesting] = useState(false);
   const [paused, setPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const failedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // If we unmount mid-recording (e.g. the user switches away from the Record
@@ -52,21 +54,37 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
     setError(null);
     setDone(false);
     onRecorded(null);
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setError("This browser does not support microphone recording. Upload a file instead.");
+      return;
+    }
+    setRequesting(true);
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
       setError(t.micError);
+      setRequesting(false);
       return;
     }
-    const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
-    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    let rec: MediaRecorder;
+    try {
+      const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+      rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    } catch {
+      stream.getTracks().forEach((track) => track.stop());
+      setRequesting(false);
+      setError("The microphone opened, but this browser could not create a recording.");
+      return;
+    }
+    failedRef.current = false;
     chunksRef.current = [];
     rec.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
     rec.onstop = () => {
       stream.getTracks().forEach((t) => t.stop());
+      if (failedRef.current) return;
       const type = rec.mimeType || "audio/webm";
       const blob = new Blob(chunksRef.current, { type });
       const ext = type.includes("ogg") ? "ogg" : "webm";
@@ -74,8 +92,24 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
       onRecorded(new File([blob], name, { type }));
       setDone(true);
     };
+    rec.onerror = () => {
+      failedRef.current = true;
+      stream.getTracks().forEach((track) => track.stop());
+      stopTimer();
+      setRecording(false);
+      setPaused(false);
+      setError("Recording stopped because the browser reported an error. Try again or upload a file.");
+    };
     recorderRef.current = rec;
-    rec.start();
+    try {
+      rec.start();
+    } catch {
+      stream.getTracks().forEach((track) => track.stop());
+      setRequesting(false);
+      setError("Recording could not start. Try again or upload a file.");
+      return;
+    }
+    setRequesting(false);
     setRecording(true);
     setPaused(false);
     setSeconds(0);
@@ -111,53 +145,56 @@ export default function Recorder({ onRecorded }: { onRecorded: (file: File | nul
           <button
             type="button"
             onClick={start}
-            className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink hover:opacity-90"
+            disabled={requesting}
+            className="button-primary"
           >
-            ● {done ? t.recordAgain : t.start}
+            <span aria-hidden="true">●</span>{" "}
+            {requesting ? "Waiting for microphone permission…" : done ? <T id="recorder.recordAgain" /> : <T id="recorder.start" />}
           </button>
         )}
         {recording && !paused && (
           <button
             type="button"
             onClick={pause}
-            className="rounded-md border border-line px-4 py-2 text-sm font-medium hover:border-brand"
+            className="button-secondary"
           >
-            ❚❚ {t.pause}
+            <span aria-hidden="true">❚❚</span> <T id="recorder.pause" />
           </button>
         )}
         {recording && paused && (
           <button
             type="button"
             onClick={resume}
-            className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-ink hover:opacity-90"
+            className="button-primary"
           >
-            ● {t.resume}
+            <span aria-hidden="true">●</span> <T id="recorder.resume" />
           </button>
         )}
         {recording && (
           <button
             type="button"
             onClick={stop}
-            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-brand-ink hover:bg-red-500"
+            className="button-danger"
           >
-            ■ {t.stop}
+            <span aria-hidden="true">■</span> <T id="recorder.stop" />
           </button>
         )}
         {recording && (
           <span
-            className={`flex items-center gap-2 text-sm ${paused ? "text-muted" : "text-red-600"}`}
+            role="timer"
+            className={`flex items-center gap-2 text-sm ${paused ? "text-muted" : "text-danger"}`}
           >
             <span
-              className={`h-2 w-2 rounded-full bg-red-600 ${paused ? "" : "animate-pulse"}`}
+              className="h-2 w-2 rounded-full bg-danger"
             />
-            {paused ? `${t.paused} · ${mmss}` : mmss}
+            {paused ? <><T id="recorder.paused" /> · {mmss}</> : <>Recording · {mmss}</>}
           </span>
         )}
         {done && !recording && (
-          <span className="text-sm text-green-600">{fill(t.ready, { time: mmss })}</span>
+          <span role="status" className="text-sm text-success"><T id="recorder.ready" vars={{ time: mmss }} /></span>
         )}
       </div>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
     </div>
   );
 }

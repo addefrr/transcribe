@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isAdmin } from "@/lib/admin";
 import { getCurrentUser } from "@/lib/auth";
-import { CONTENT_NAMESPACES, DEFAULT_CONTENT } from "@/lib/content";
+import { CONTENT_NAMESPACES, contentValueProblem, DEFAULT_CONTENT } from "@/lib/content";
 import { getContent, setContent } from "@/lib/settings";
 
 const bodySchema = z.object({
@@ -25,6 +25,8 @@ export async function POST(req: NextRequest) {
   if (!CONTENT_NAMESPACES.includes(ns as (typeof CONTENT_NAMESPACES)[number]) || !(key in known[ns])) {
     return NextResponse.json({ error: "Unknown content key" }, { status: 400 });
   }
+  const problem = contentValueProblem(ns, key, value);
+  if (problem) return NextResponse.json({ error: problem }, { status: 400 });
 
   const current = await getContent();
   const next = structuredClone(current) as unknown as Record<string, Record<string, string>>;

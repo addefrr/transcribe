@@ -1,46 +1,78 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
-import { useContent } from "@/components/ContentProvider";
+import { useActionState, useId } from "react";
 import { requestPasswordReset } from "@/app/(auth)/actions";
+import { T } from "@/components/T";
 
 export default function ForgotPasswordForm() {
   const [state, formAction, pending] = useActionState(requestPasswordReset, {});
-  const t = useContent().auth;
+  const emailId = useId();
+  const noticeId = useId();
+  const errorId = useId();
+
   return (
-    <div className="mx-auto mt-16 w-full max-w-sm rounded-xl border border-line p-8">
-      <h1 className="mb-2 text-2xl font-semibold">{t.forgotTitle}</h1>
-      <p className="mb-6 text-sm text-muted">{t.forgotBody}</p>
+    <div className="mx-auto mt-10 w-full max-w-sm rounded-xl border border-line p-5 sm:mt-16 sm:p-8">
+      <h1 className="mb-2 text-2xl font-semibold tracking-tight">
+        <T id="auth.forgotTitle" />
+      </h1>
+      <p className="mb-6 text-sm leading-6 text-muted">
+        <T id="auth.forgotBody" />
+      </p>
+
       {state.notice && (
-        <p className="mb-4 rounded-md bg-green-100 px-3 py-2 text-sm text-green-800 dark:bg-green-950 dark:text-green-300">
+        <p
+          id={noticeId}
+          role="status"
+          aria-live="polite"
+          className="mb-4 rounded-md bg-success-soft px-3 py-2 text-sm text-success"
+        >
           {state.notice}
         </p>
       )}
-      <form action={formAction} className="space-y-4">
-        <label className="block">
-          <span className="mb-1 block text-sm text-muted">{t.emailLabel}</span>
+
+      <form action={formAction} aria-busy={pending} className="space-y-4">
+        <div>
+          <label htmlFor={emailId} className="mb-1.5 block text-sm font-medium">
+            <T id="auth.emailLabel" />
+          </label>
           <input
+            id={emailId}
             name="email"
             type="email"
             required
             autoComplete="email"
-            className="w-full rounded-md border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-brand"
+            aria-describedby={state.error ? errorId : state.notice ? noticeId : undefined}
+            className="min-h-11 w-full rounded-md border border-line bg-transparent px-3 text-base focus:border-brand"
           />
-        </label>
-        {state.error && <p className="text-sm text-red-600">{state.error}</p>}
+        </div>
+
+        {state.error && (
+          <p
+            id={errorId}
+            role="alert"
+            className="rounded-md bg-danger-soft px-3 py-2 text-sm text-danger"
+          >
+            {state.error}
+          </p>
+        )}
+
         <button
           type="submit"
           disabled={pending}
-          className="w-full rounded-md bg-brand py-2 text-sm font-medium text-brand-ink hover:opacity-90 disabled:opacity-50"
+          className="min-h-11 w-full rounded-md bg-brand px-4 text-sm font-semibold text-brand-ink hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
         >
-          {pending ? "…" : t.forgotCta}
+          {pending ? <T id="auth.sendingReset" /> : <T id="auth.forgotCta" />}
         </button>
       </form>
+
       <p className="mt-4 text-sm text-muted">
-        {t.forgotBack}{" "}
-        <Link href="/login" className="text-brand hover:underline">
-          {t.loginCta}
+        <T id="auth.forgotBack" />{" "}
+        <Link
+          href="/login"
+          className="inline-flex min-h-11 items-center text-brand hover:underline"
+        >
+          <T id="auth.loginCta" />
         </Link>
       </p>
     </div>

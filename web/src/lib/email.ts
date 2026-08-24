@@ -13,6 +13,9 @@ export function appUrl(): string {
 export async function sendEmail(mail: Mail): Promise<void> {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("Transactional email is not configured.");
+    }
     console.log(
       `\n[email:dev] would send to ${mail.to}\n  subject: ${mail.subject}\n  ${mail.text.replace(/\n/g, "\n  ")}\n`,
     );

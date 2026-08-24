@@ -5,6 +5,24 @@
 export type TierKey = "standard" | "premium";
 export type Tier = TierKey; // backwards-compatible alias
 
+export const TIER_FEATURE_KEYS = [
+  "speakerLabels",
+  "textExport",
+  "subtitleExport",
+  "audioPlayback",
+  "publicSharing",
+] as const;
+export type TierFeatureKey = (typeof TIER_FEATURE_KEYS)[number];
+export type TierFeatures = Record<TierFeatureKey, boolean>;
+
+export const TIER_FEATURE_LABELS: Record<TierFeatureKey, string> = {
+  speakerLabels: "Speaker labels",
+  textExport: "Text export",
+  subtitleExport: "SRT & VTT subtitle exports",
+  audioPlayback: "Synced audio playback",
+  publicSharing: "Public share links",
+};
+
 export interface TierConfig {
   label: string;
   creditsPerMinute: number;
@@ -30,8 +48,9 @@ export function estimateCredits(durationSeconds: number, creditsPerMinute: numbe
 }
 
 /**
- * Fair-use minute allowance for a subscription period, as a pure function so the
- * admin UI can preview it without importing the DB.
+ * Legacy migration helper for old price/cost-derived subscription rows.
+ * Current plan entitlements are configured explicitly in settings and do not
+ * change when a provider cost assumption changes.
  *
  * allowance = (plan price ÷ our compute cost per minute) × cap%
  *           = price × cap% ÷ cost-per-minute

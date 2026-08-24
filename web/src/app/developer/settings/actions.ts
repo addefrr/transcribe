@@ -3,13 +3,24 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isAdmin } from "@/lib/admin";
-import { type Content, CONTENT_NAMESPACES, DEFAULT_CONTENT } from "@/lib/content";
-import { costPerHourUsd, costPerMinuteCentsFromHourUsd, TIER_KEYS } from "@/lib/pricing";
+import {
+  type Content,
+  CONTENT_NAMESPACES,
+  contentValueProblem,
+  DEFAULT_CONTENT,
+} from "@/lib/content";
+import {
+  costPerHourUsd,
+  costPerMinuteCentsFromHourUsd,
+  TIER_FEATURE_KEYS,
+  TIER_KEYS,
+  type TierFeatures,
+} from "@/lib/pricing";
 import {
   getContent,
   getSettings,
-  setContent,
-  setSetting,
+  setSettingsAtomically,
+  type Settings,
   type Pack,
   type SubscriptionPlan,
   type TierConfig,
@@ -20,10 +31,11 @@ function num(form: FormData, name: string, fallback: number): number {
   return Number.isFinite(v) ? v : fallback;
 }
 
-export async function saveSettings(formData: FormData): Promise<void> {
-  const user = await getCurrentUser();
-  if (!isAdmin(user)) redirect("/dashboard");
+export type SettingsActionState = { error?: string };
 
+class SettingsInputError extends Error {}
+
+async function persistSettings(formData: FormData): Promise<void> {
   const current = await getSettings();
 
   // Tiers: editable label / rate / description per tier key.
@@ -41,7 +53,21 @@ export async function saveSettings(formData: FormData): Promise<void> {
     };
     tiers[key] = tier;
   }
-  await setSetting("tiers", tiers);
+
+  // Features are enforced by the relevant API routes as well as reflected in
+  // the UI. Groq cannot produce speaker labels, so that capability can only be
+  // offered on Premium's Soniox route.
+  const tierFeatures = structuredClone(current.tierFeatures);
+  for (const key of TIER_KEYS) {
+    tierFeatures[key] = Object.fromEntries(
+      TIER_FEATURE_KEYS.map((feature) => [
+        feature,
+        feature === "speakerLabels" && key === "standard"
+          ? false
+          : formData.get(`feature_${key}_${feature}`) === "on",
+      ]),
+    ) as TierFeatures;
+  }
 
   // Packs: edit existing packs in place (name / credits / price).
   const packs: Pack[] = current.packs.map((p) => ({
@@ -50,23 +76,25 @@ export async function saveSettings(formData: FormData): Promise<void> {
     credits: Math.max(1, Math.round(num(formData, `pack_${p.id}_credits`, p.credits))),
     amountUsdCents: Math.max(50, Math.round(num(formData, `pack_${p.id}_cents`, p.amountUsdCents))),
   }));
-  await setSetting("packs", packs);
 
-  await setSetting(
-    "signupBonusCredits",
-    Math.max(0, Math.round(num(formData, "signupBonusCredits", current.signupBonusCredits))),
+  const signupBonusCredits = Math.max(
+    0,
+    Math.round(num(formData, "signupBonusCredits", current.signupBonusCredits)),
   );
-  await setSetting(
-    "usdCentsPerCredit",
-    Math.max(1, num(formData, "usdCentsPerCredit", current.usdCentsPerCredit)),
+  const usdCentsPerCredit = Math.max(
+    0.0001,
+    num(formData, "usdCentsPerCredit", current.usdCentsPerCredit),
   );
-  await setSetting(
-    "minPurchaseUsdCents",
-    Math.max(50, Math.round(num(formData, "minPurchaseUsdCents", current.minPurchaseUsdCents))),
+  const minPurchaseUsdCents = Math.max(
+    50,
+    Math.round(num(formData, "minPurchaseUsdCents", current.minPurchaseUsdCents)),
   );
 
-  // Subscriptions: toggle, per-tier compute cost, and per-plan price/cap/label.
-  await setSetting("subscriptionsEnabled", formData.get("subscriptionsEnabled") === "on");
+  // Subscriptions: toggle, provider-cost reporting, and explicit customer
+  // price/allowance promises. Allowances must not silently change with costs.
+  const subscriptionsEnabled = formData.get("subscriptionsEnabled") === "on";
+  const developerSubscriptionBypass =
+    formData.get("developerSubscriptionBypass") === "on";
   // The form submits our cost as $/hour of audio; store it as ¢/min.
   const costHourStd = num(
     formData,
@@ -78,25 +106,36 @@ export async function saveSettings(formData: FormData): Promise<void> {
     "cost_premium",
     costPerHourUsd(current.costPerMinuteCents.premium),
   );
-  await setSetting("costPerMinuteCents", {
+  const costPerMinuteCents = {
     standard: Math.max(0.0001, costPerMinuteCentsFromHourUsd(costHourStd)),
     premium: Math.max(0.0001, costPerMinuteCentsFromHourUsd(costHourPrem)),
-  });
-  const plans: SubscriptionPlan[] = current.subscriptionPlans.map((plan) => ({
+  };
+  const submittedPlans: SubscriptionPlan[] = current.subscriptionPlans.map((plan) => ({
     ...plan,
     label: String(formData.get(`plan_${plan.id}_label`) ?? plan.label).slice(0, 60),
     priceUsdCents: Math.max(50, Math.round(num(formData, `plan_${plan.id}_cents`, plan.priceUsdCents))),
-    capPct: Math.min(100, Math.max(1, num(formData, `plan_${plan.id}_cap`, plan.capPct))),
+    allowanceMinutes: Math.max(
+      1,
+      Math.round(
+        num(formData, `plan_${plan.id}_allowance`, plan.allowanceMinutes),
+      ),
+    ),
   }));
-  await setSetting("subscriptionPlans", plans);
-
-  await setSetting(
-    "walletSpendPct",
-    Math.min(100, Math.max(1, num(formData, "walletSpendPct", current.walletSpendPct))),
+  // Annual billing changes the payment cadence, not the monthly entitlement.
+  // Normalize this server-side as well as showing the annual field read-only,
+  // so a crafted form submission cannot create contradictory plan promises.
+  const plans: SubscriptionPlan[] = submittedPlans.map((plan) => {
+    if (plan.interval !== "year") return plan;
+    const monthly = submittedPlans.find(
+      (candidate) => candidate.tier === plan.tier && candidate.interval === "month",
+    );
+    return monthly ? { ...plan, allowanceMinutes: monthly.allowanceMinutes } : plan;
+  });
+  const walletSpendPct = Math.min(
+    100,
+    Math.max(1, num(formData, "walletSpendPct", current.walletSpendPct)),
   );
-
-  // Transcription: reuse toggle.
-  await setSetting("reuseTranscripts", formData.get("reuseTranscripts") === "on");
+  const reuseTranscripts = formData.get("reuseTranscripts") === "on";
 
   // Site text: data-driven — rebuild the content dictionary from one field per
   // string (content.<namespace>.<key>), falling back to the current value.
@@ -109,13 +148,49 @@ export async function saveSettings(formData: FormData): Promise<void> {
     for (const key of Object.keys(content[ns])) {
       const field = `content.${ns}.${key}`;
       const raw = formData.get(field);
-      content[ns][key] =
+      const value =
         typeof raw === "string" && raw.length > 0
           ? raw.slice(0, 2000)
           : (currentContent as unknown as Record<string, Record<string, string>>)[ns][key];
+      const problem = contentValueProblem(ns, key, value);
+      if (problem) throw new SettingsInputError(`${ns}.${key}: ${problem}`);
+      content[ns][key] = value;
     }
   }
-  await setContent(content as unknown as Content);
+  const values: Partial<Settings> = {
+    tiers,
+    tierFeatures,
+    packs,
+    signupBonusCredits,
+    usdCentsPerCredit,
+    minPurchaseUsdCents,
+    subscriptionsEnabled,
+    developerSubscriptionBypass,
+    costPerMinuteCents,
+    subscriptionPlans: plans,
+    walletSpendPct,
+    reuseTranscripts,
+  };
+  await setSettingsAtomically(values, content as unknown as Content);
+}
+
+export async function saveSettings(
+  _previous: SettingsActionState,
+  formData: FormData,
+): Promise<SettingsActionState> {
+  const user = await getCurrentUser();
+  if (!isAdmin(user)) redirect("/dashboard");
+
+  try {
+    await persistSettings(formData);
+  } catch (error) {
+    console.error("Could not save developer settings", error);
+    return {
+      error: error instanceof SettingsInputError
+        ? error.message
+        : "Settings could not be saved. No changes were applied; review the form and try again.",
+    };
+  }
 
   redirect("/developer/settings?saved=1");
 }

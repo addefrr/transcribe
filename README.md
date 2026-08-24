@@ -1,18 +1,14 @@
 # Transcribe
 
-Pay-as-you-go AI transcription. Users buy **credits** (Stripe), submit an
+AI transcription with pay-as-you-go credits or time-limited plans. Users submit an
 **audio/video file or a URL** (YouTube or any direct media link), pick a
 **quality tier** and language, and get a transcript with timestamps plus
 TXT/SRT/VTT export. Transcription runs on managed speech-to-text APIs behind a
 small provider interface, so swapping backends (or self-hosting faster-whisper)
 is a config change.
 
-- **Standard tier is language-routed**: [Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR)
-  for the languages it covers well (cheaper and more accurate, especially
-  English and Asian languages), and Whisper large-v3-turbo via Groq for the
-  long-tail languages Qwen doesn't support. The user's language choice at
-  submission drives the routing; "Auto" stays on Qwen (which auto-detects).
-- **Premium tier**: AssemblyAI, for best-in-class long-form accuracy.
+- **Standard tier**: Whisper large-v3-turbo through Groq's synchronous API.
+- **Premium tier**: Soniox `stt-async-v5`, including optional speaker labels.
 
 ## How it works
 
@@ -26,21 +22,25 @@ Browser ──► web/ (Next.js: auth, credits, Stripe, job API)
             worker/ (Python: yt-dlp ▸ ffmpeg ▸ transcribe ▸ settle credits)
                  │
                  ▼
-  transcription API (Qwen / Groq / AssemblyAI)   ← routed by tier + language
+       transcription API (Groq / Soniox)         ← routed by tier
 ```
 
-- **1 credit = 1 minute of Standard-tier audio.** Premium costs 2 credits/min.
-  Rates, packs and the signup bonus live in `web/src/lib/pricing.ts`; the rate
-  is frozen into each job at submission.
-- Credits are **held** when a job's duration is known (metadata probe — no
-  full download needed for most URLs), **charged** for actual duration on
-  completion (never more than the hold), and **fully refunded** on failure.
+- The default configuration uses **1 credit per started Standard minute** and
+  **2 credits per started Premium minute**. Rates, packs, plan allowances, and
+  the verified-email signup bonus are editable in the developer portal; the
+  applicable rate is frozen into each submitted job.
+- Credits and subscription minutes are **reserved** when duration is known,
+  charged for actual duration on completion (never more than the reservation),
+  and released on failure. URL jobs stop after an isolated worker-side duration
+  check so the customer can review the exact plan/backup-credit split before
+  paid transcription begins.
   Every movement is a row in `credit_ledger`; `SUM(delta)` always equals the
   user's balance.
 - The worker claims jobs with `FOR UPDATE SKIP LOCKED` — run as many worker
-  processes as you want, no extra queue infrastructure.
-- Stripe Checkout handles payment; the webhook credits the account
-  idempotently (unique `stripe_event_id`), so replayed deliveries are no-ops.
+  processes as you want, no extra queue infrastructure. A user-row lock keeps
+  playlist jobs within `MAX_ACTIVE_JOBS_PER_USER` even across many workers.
+- Stripe Checkout handles payments and subscriptions. Signed webhooks record
+  purchases and renewals idempotently, so replayed deliveries are no-ops.
 
 ## Local development
 
@@ -61,12 +61,13 @@ npm run dev                            # http://localhost:3000
 cd worker
 python3 -m venv .venv && .venv/bin/pip install -e .
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/transcribe \
-  GROQ_API_KEY=... ASSEMBLYAI_API_KEY=... \
+  GROQ_API_KEY=... SONIOX_API_KEY=... \
   .venv/bin/python -m worker.main
 ```
 
-Sign up (new accounts get 10 free credits), upload a clip or paste a URL, and
-watch the job progress on the dashboard. No API keys handy? Run the worker with
+Sign up and verify the email address (verified new accounts get 10 free credits),
+upload a clip or paste a URL, and watch the job progress on the dashboard. No API
+keys handy? Run the worker with
 `TRANSCRIBE_BACKEND=fake` to exercise the whole flow with canned transcripts.
 
 Dev conveniences (never enable in production):
@@ -83,38 +84,61 @@ All knobs are environment variables — see [`.env.example`](.env.example) for
 the full annotated list. Highlights:
 
 - **Transcription** — routing lives in `worker/worker/routing.py`. Standard-tier
-  jobs go to Qwen (`QWEN_API_KEY`) unless the chosen language isn't in
-  `QWEN_LANGUAGES`, in which case they fall back to `STANDARD_FALLBACK_BACKEND`
-  (Groq, `GROQ_API_KEY`). Premium jobs go to `PREMIUM_BACKEND` (AssemblyAI,
-  `ASSEMBLYAI_API_KEY`). Backends are `qwen | groq | assemblyai | local | fake`;
-  `local` runs [faster-whisper](https://github.com/SYSTRAN/faster-whisper) in
-  the worker (install `pip install ".[local]"`, set `WHISPER_MODEL_*`) — the
-  genuinely-free self-hosted path. `TRANSCRIBE_BACKEND` forces every job onto one
-  backend. Qwen's API caps requests at ~3 min, so the worker splits longer audio
-  into `QWEN_CHUNK_SECONDS` chunks and stitches the timestamps back together.
-- **Storage** — `STORAGE_DRIVER=local` (files under `data/uploads/`) is fine in
-  production since the worker reads audio from disk; use `s3` (R2/MinIO/S3) only
-  when web and worker run on separate machines. MinIO ships in docker-compose:
-  `docker compose --profile s3 up -d`.
+  jobs use Groq Whisper Large V3 Turbo (`GROQ_API_KEY`); Premium jobs use Soniox
+  async v5 (`SONIOX_API_KEY`), with optional speaker diarization. Hosted backends
+  are `groq | soniox`; development backends are `local | fake`.
+  Production routing is deliberately limited to Groq and Soniox. `local` and
+  `fake` remain development/test overrides and are not customer-selectable.
+  Set `GROQ_MAX_UPLOAD_BYTES=26214400` when using Groq Free; the example uses
+  the documented 100 MB developer-tier ceiling.
+- **Storage** — `STORAGE_DRIVER=local` stores files under `data/uploads/` and is
+  suitable only when the web and worker share the same persistent filesystem.
+  Use `s3` (R2/MinIO/S3) for separate or serverless hosts. MinIO ships in
+  docker-compose: `docker compose --profile s3 up -d`.
 - **Stripe** — set `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`, point a
-  webhook at `POST /api/stripe/webhook` for `checkout.session.completed`.
+  webhook at `POST /api/stripe/webhook`, and subscribe to the event list printed
+  by `make connect`.
 - **Limits** — `MAX_DURATION_SECONDS` (default 4 h), `MAX_FILESIZE_BYTES`
-  (default 2 GB), `MAX_ACTIVE_JOBS_PER_USER` (default 3).
+  (default 2 GB), `MAX_ACTIVE_JOBS_PER_USER` (default 3),
+  `MAX_JOB_SUBMISSIONS_PER_HOUR` (default 30), and `MAX_PLAYLIST_ITEMS`
+  (default 100).
 
 ## Production deployment (reference setup)
 
+Run `make providers` for direct links to Cloudflare, R2, PostgreSQL, Groq,
+Soniox, Stripe, and Resend. `make connect` prints the exact configuration order
+and Stripe webhook events; `make production-check` validates configured values
+without printing secrets.
+
+### Cloudflare status
+
+Cloudflare DNS/CDN and R2 object storage can be used now, but `web/` is **not
+currently deploy-ready for Cloudflare Workers**. This repository has no
+OpenNext adapter dependency or `wrangler`/OpenNext deployment configuration,
+`@node-rs/argon2` relies on a native N-API module that workerd does not support,
+and the Workers Free 10 ms CPU allowance is unsuitable or at least unverified
+for password hashing and this app's dynamic SSR/authentication paths. A normal
+successful `next build` verifies the Node.js target only; it does not verify a
+Workers bundle or runtime.
+
+Until those blockers are deliberately migrated and tested, deploy `web/` to a
+Node.js host and put the public domain behind Cloudflare if desired. Keep R2 for
+shared object storage and run `worker/` on a separate container/VM. Do not add an
+OpenNext adapter and assume parity: authentication, database connectivity,
+uploads, Stripe webhooks, headers, and runtime CPU limits all need a real
+Workers build and production-like verification first.
+
 | Piece | Suggested home | Notes |
 | --- | --- | --- |
-| `web/` | Vercel | any Node host; set env vars from `.env.example` |
+| `web/` | Node.js host (current verified target) | Cloudflare Workers/OpenNext migration is pending; set all values from `.env.example` |
 | Postgres | Neon / Supabase / RDS | run `npm run db:migrate` on deploy |
 | `worker/` | Railway / Render / any small VM | `worker/Dockerfile`; a long-lived poll loop, scale by adding instances |
-| Transcription | Qwen + Groq + AssemblyAI | just API keys — no GPU infra to run |
-| Storage | local disk, or Cloudflare R2 | R2 only if web/worker are on different hosts |
+| Transcription | Groq + Soniox | just API keys — no GPU infra to run |
+| DNS/CDN and storage | Cloudflare + R2 | Usable now; R2 is required when web and worker do not share a filesystem |
 
-Rough unit economics: Groq transcribes Whisper large-v3-turbo at ~$0.04/audio-
-hour and AssemblyAI Premium around $0.15–0.45/hour, versus an hour of Premium
-that sells for 120 credits (≈ $4.80 at the Starter pack rate) — compute is a
-low single-digit percentage of revenue.
+Provider-cost assumptions used by the developer dashboard are configuration,
+not customer promises. Recheck them against current Groq and Soniox invoices
+before changing prices or allowances.
 
 ## Security notes
 
@@ -124,8 +148,9 @@ low single-digit percentage of revenue.
   fetched. Run workers in a network segment without reachable internal
   services for defense in depth — DNS rebinding/redirects are otherwise
   still a residual risk.
-- Upload keys are server-minted UUIDs; path traversal is rejected on both
-  write and read.
+- Upload keys are server-minted UUIDs and bound to one verified account, exact
+  byte size, expiry, and single job. Path traversal is rejected on write/read,
+  and the worker verifies object size again immediately before download.
 - Stripe webhooks are signature-verified and idempotent by event id.
 - Heads-up: downloading from YouTube may violate YouTube's Terms of Service,
   and datacenter IPs are frequently bot-checked; operating that feature is
@@ -136,8 +161,8 @@ low single-digit percentage of revenue.
 ```
 web/      Next.js 15 app — UI, auth, credits, Stripe, job API, Drizzle schema
 worker/   Python worker — probe, download (yt-dlp), normalize (ffmpeg),
-          transcribe (Qwen / Groq / AssemblyAI / local faster-whisper), settle
-          worker/routing.py — tier + language → backend
+          transcribe (Groq / Soniox / local faster-whisper), settle
+          worker/routing.py — tier → backend
           worker/providers/ — one module per transcription backend
 drizzle migrations: web/drizzle/   ·   compose stack: docker-compose.yml
 ```

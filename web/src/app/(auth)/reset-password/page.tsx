@@ -1,7 +1,7 @@
 import Link from "next/link";
 import ResetPasswordForm from "@/components/ResetPasswordForm";
 
-export const metadata = { title: "Reset your password — Transcribe" };
+export const metadata = { title: "Reset your password" };
 
 export default async function ResetPasswordPage({
   searchParams,
@@ -15,7 +15,7 @@ export default async function ResetPasswordPage({
         <h1 className="mb-2 text-2xl font-semibold">Invalid link</h1>
         <p className="text-sm text-muted">
           This password-reset link is missing or malformed.{" "}
-          <Link href="/forgot-password" className="text-brand hover:underline">
+          <Link href="/forgot-password" className="text-brand underline underline-offset-4">
             Request a new one
           </Link>
           .

@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   doublePrecision,
   index,
@@ -8,7 +9,9 @@ import {
   text,
   timestamp,
   uuid,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -69,6 +72,27 @@ export const sessions = pgTable("sessions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Shared fixed-window abuse controls. Keeping these buckets in Postgres makes
+// limits consistent across serverless instances and restarts.
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").primaryKey(), // sha256 of the logical bucket key
+    count: integer("count").notNull(),
+    resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("rate_limits_reset_idx").on(t.resetAt)],
+);
+
+// Non-identifying lifetime counters retained when a customer deletes a job or
+// account. This lets privacy deletion remove customer-linked rows without
+// rewriting the platform's historical revenue, provider-spend, and usage
+// totals. Each key is an additive numeric metric.
+export const platformMetrics = pgTable("platform_metrics", {
+  key: text("key").primaryKey(),
+  value: doublePrecision("value").notNull().default(0),
+});
+
 // Append-only audit trail; users.credit_balance is updated in the same
 // transaction as every insert here, so SUM(delta) always equals the balance.
 export const creditLedger = pgTable("credit_ledger", {
@@ -78,7 +102,9 @@ export const creditLedger = pgTable("credit_ledger", {
     .references(() => users.id, { onDelete: "cascade" }),
   delta: integer("delta").notNull(),
   reason: text("reason").notNull(), // signup_bonus | purchase | hold | refund
-  amountUsdCents: integer("amount_usd_cents"), // set on purchases: what the user actually paid
+  // Tax-exclusive payment value used for operational reporting. Historical
+  // rows written before this field was normalized may contain the gross total.
+  amountUsdCents: integer("amount_usd_cents"),
   jobId: uuid("job_id"),
   stripeEventId: text("stripe_event_id").unique(), // idempotency key for webhooks
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -104,9 +130,19 @@ export const jobs = pgTable("jobs", {
   creditsPerMinute: integer("credits_per_minute").notNull(),
   billing: text("billing").notNull().default("credits"), // credits | subscription
   subscriptionId: uuid("subscription_id"),
+  // Subscription minutes and backup credits are reserved before an ASR call.
+  // This prevents concurrent jobs from exceeding a plan allowance. A job may
+  // use both when it crosses the end of an allowance period.
+  subscriptionMinutesHeld: integer("subscription_minutes_held").notNull().default(0),
+  subscriptionMinutesCharged: integer("subscription_minutes_charged").notNull().default(0),
+  // Snapshot the allowance window that supplied the hold. A refund from a job
+  // finishing after reset must not subtract usage from the new window.
+  subscriptionAllowancePeriodEnd: timestamp("subscription_allowance_period_end", {
+    withTimezone: true,
+  }),
   batchId: uuid("batch_id"), // set for jobs that came from a playlist batch
   folderId: uuid("folder_id"), // optional: user-created folder this transcript is filed under
-  diarize: boolean("diarize").notNull().default(false), // label speakers (Premium/AssemblyAI)
+  diarize: boolean("diarize").notNull().default(false), // label speakers (Premium/Soniox)
   // Estimated API cost: rate snapshotted at submit, actual set at completion.
   costPerMinuteCents: doublePrecision("cost_per_minute_cents").notNull().default(0),
   estCostCents: doublePrecision("est_cost_cents").notNull().default(0),
@@ -125,6 +161,19 @@ export const jobs = pgTable("jobs", {
   // Set to a random token when the owner turns on public sharing; the transcript
   // is then readable at /share/<share_id> without signing in. Null = private.
   shareId: text("share_id").unique(),
+  // URL jobs are safely probed by the isolated worker and shown to the user for
+  // confirmation before any paid transcription request is made.
+  requiresConfirmation: boolean("requires_confirmation").notNull().default(false),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  // Snapshot the route that actually produced the result. This remains truthful
+  // if deployment defaults change later.
+  provider: text("provider"),
+  model: text("model"),
+  resultSource: text("result_source"), // provider | same-account-cache
+  // Point of no return for conservative spend accounting. Once a provider
+  // request may have been accepted, a timeout/failure must not release the
+  // projected API-cost reservation or automatically replay the paid request.
+  providerStartedAt: timestamp("provider_started_at", { withTimezone: true }),
   claimedAt: timestamp("claimed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -160,7 +209,44 @@ export const transcripts = pgTable("transcripts", {
   text: text("text").notNull(),
   segments: jsonb("segments").notNull().$type<TranscriptSegment[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// A small revision trail makes customer corrections reversible. A revision is
+// written before each edit; the current text remains in `transcripts` so every
+// export and public share uses the corrected version.
+export const transcriptRevisions = pgTable(
+  "transcript_revisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    text: text("text").notNull(),
+    segments: jsonb("segments").notNull().$type<TranscriptSegment[]>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("transcript_revisions_job_idx").on(t.jobId, t.createdAt)],
+);
+
+// Upload intents bind server-minted object keys to one account and an expiry.
+// The worker deletes terminal sources and expired unclaimed objects.
+export const uploads = pgTable(
+  "uploads",
+  {
+    key: text("key").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    originalFilename: text("original_filename").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("uploads_expiry_idx").on(t.expiresAt, t.claimedAt)],
+);
 
 // Admin-editable settings. One row per top-level settings key; value is JSON.
 // Read/merged over code defaults in web/src/lib/settings.ts.
@@ -171,7 +257,8 @@ export const settings = pgTable("settings", {
 });
 
 // Active/past subscriptions. A user has at most one active row (enforced in app
-// logic). Fair-use is metered by minutesUsed against allowanceMinutes per period.
+// logic). Fair-use is metered by minutesUsed against allowanceMinutes. Annual
+// plans are billed annually but their allowance resets monthly.
 export const subscriptions = pgTable(
   "subscriptions",
   {
@@ -182,15 +269,31 @@ export const subscriptions = pgTable(
     planId: text("plan_id").notNull(), // matches a SubscriptionPlan.id
     tier: text("tier").notNull(), // standard | premium
     interval: text("interval").notNull(), // month | year | week
-    status: text("status").notNull().default("active"), // active | canceled | expired
+    // active grants entitlement. Stripe lifecycle values such as past_due,
+    // unpaid, or paused are retained but do not grant transcription minutes.
+    status: text("status").notNull().default("active"),
     allowanceMinutes: integer("allowance_minutes").notNull(),
     minutesUsed: integer("minutes_used").notNull().default(0),
+    // The allowance window. This is monthly for both monthly and annual plans,
+    // and weekly for a one-time week pass; periodStart/End remain the billing
+    // period used to decide whether the subscription is active.
+    allowancePeriodStart: timestamp("allowance_period_start", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    allowancePeriodEnd: timestamp("allowance_period_end", { withTimezone: true }).notNull(),
     periodStart: timestamp("period_start", { withTimezone: true }).notNull().defaultNow(),
     periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
     stripeSubscriptionId: text("stripe_subscription_id").unique(),
+    stripeCustomerId: text("stripe_customer_id"),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("subscriptions_user_idx").on(t.userId, t.status)],
+  (t) => [
+    index("subscriptions_user_idx").on(t.userId, t.status),
+    uniqueIndex("subscriptions_one_active_user_idx")
+      .on(t.userId)
+      .where(sql`${t.status} = 'active'`),
+  ],
 );
 
 export type Subscription = typeof subscriptions.$inferSelect;

@@ -54,24 +54,33 @@ def process_job(conn: psycopg.Connection, job: dict[str, Any]) -> None:
     try:
         with _Heartbeat(job["id"]):
             _run(conn, job, workdir)
-        _cleanup_source(job)
+        _cleanup_source(conn, job)
     except JobError as exc:
         log.warning("job %s failed: %s", job["id"], exc)
         db.fail_job(conn, job, str(exc))
-        _cleanup_source(job)
+        _cleanup_source(conn, job)
     except Exception:
         log.exception("job %s crashed", job["id"])
         db.fail_job(conn, job, "Internal error while processing this job.")
-        _cleanup_source(job)
+        _cleanup_source(conn, job)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
 
-def _cleanup_source(job: dict[str, Any]) -> None:
+def _cleanup_source(conn: psycopg.Connection, job: dict[str, Any]) -> None:
     """Delete the uploaded source once the job is terminal. Deliberately not
     reached when fail_job itself raised — a requeued job still needs the file."""
     if job["source_type"] == "upload" and job["upload_key"]:
-        storage.delete_key(job["upload_key"])
+        if storage.delete_key(job["upload_key"]):
+            # Upload-intent rows are lifecycle metadata, not a permanent history.
+            conn.execute("DELETE FROM uploads WHERE key = %s", (job["upload_key"],))
+        else:
+            # Turn a claimed upload into an expired cleanup candidate. Keeping
+            # its row is what makes a transient object-store failure retryable.
+            conn.execute(
+                "UPDATE uploads SET claimed_at = NULL, expires_at = now() WHERE key = %s",
+                (job["upload_key"],),
+            )
 
 
 def _reuse(
@@ -91,9 +100,10 @@ def _reuse(
                 db.set_audio(conn, job["id"], key, config.AUDIO_RETENTION_DAYS)
         except Exception:
             log.warning("could not copy reused audio for job %s", job["id"], exc_info=True)
+    db.set_reuse_info(conn, job["id"], cached.get("provider"), cached.get("model"))
     db.set_status(conn, job["id"], "transcribing")
     # Reuse copies an existing transcript, so we pay no transcription API cost —
-    # record 0 so the spend wallet and profit figures aren't inflated.
+    # record 0 so the spend wallet and contribution figures aren't inflated.
     if on_subscription:
         db.complete_job_subscription(
             conn, job, duration, cached["text"], cached["segments"], cached.get("language"),
@@ -116,6 +126,16 @@ def _check_duration(duration: float) -> None:
 
 
 def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
+    if job.get("provider_started_at") is not None:
+        # A stale paid request is not safe to replay automatically: the remote
+        # provider may have completed/billed it even if this worker never stored
+        # the response. fail_job refunds the customer's hold but deliberately
+        # retains the conservative provider-spend reservation.
+        raise JobError(
+            "A previous provider request was interrupted and was not retried "
+            "automatically to avoid a possible duplicate charge."
+        )
+
     tier = job["tier"]
     language_hint = job.get("language_hint") or None
     backend, model_name = routing.resolve(tier, language_hint)
@@ -139,13 +159,35 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
             db.set_output_name(conn, job["id"], title)
         if video_id:
             db.set_source_video_id(conn, job["id"], video_id)
+        # New URL submissions are first inspected by the isolated worker. This
+        # gives the customer an authoritative duration and cost before any paid
+        # ASR call, and keeps yt-dlp off the public web process.
+        if job.get("requires_confirmation") and not job.get("confirmed_at"):
+            if est_duration is None:
+                src = media.download_url(job["source_url"], workdir)
+                est_duration = media.probe_file(src)
+            _check_duration(est_duration)
+            db.set_awaiting_confirmation(conn, job["id"], est_duration)
+            return
     else:
-        src = storage.fetch_upload(job["upload_key"], workdir)
+        expected_size = db.upload_expected_size(conn, job["upload_key"], job["user_id"])
+        if expected_size is None:
+            raise JobError("The upload authorization is missing or expired.")
+        src = storage.fetch_upload(job["upload_key"], workdir, expected_size)
         est_duration = media.probe_file(src)
 
     if est_duration is not None:
         _check_duration(est_duration)
-        if not on_subscription:
+        # Reserve provider spend before any remote ASR call. On a pre-provider
+        # failure, fail_job releases this reservation together with user holds.
+        db.reserve_provider_spend(conn, job, est_duration)
+        if on_subscription:
+            plan_held, backup_held = db.place_subscription_hold(conn, job, est_duration)
+            log.info(
+                "job %s: %.0fs, %d plan minutes and %d backup credits held",
+                job["id"], est_duration, plan_held, backup_held,
+            )
+        else:
             held = db.place_hold(conn, job, est_duration)
             log.info("job %s: %.0fs of audio, %d credits held", job["id"], est_duration, held)
 
@@ -156,7 +198,8 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
     # setting to force a fresh transcription while testing.
     if video_id and est_duration is not None and db.get_setting(conn, "reuseTranscripts", True):
         cached = db.find_reusable_transcript(
-            conn, video_id, job["tier"], job["diarize"], job.get("language_hint")
+            conn, job["user_id"], video_id, job["tier"], job["diarize"],
+            job.get("language_hint")
         )
         if cached:
             _reuse(conn, job, video_id, cached, on_subscription)
@@ -169,16 +212,27 @@ def _run(conn: psycopg.Connection, job: dict[str, Any], workdir: str) -> None:
     if est_duration is None:
         est_duration = media.probe_file(src)
         _check_duration(est_duration)
-        if not on_subscription:
+        db.reserve_provider_spend(conn, job, est_duration)
+        if on_subscription:
+            plan_held, backup_held = db.place_subscription_hold(conn, job, est_duration)
+            log.info(
+                "job %s: %.0fs, %d plan minutes and %d backup credits held",
+                job["id"], est_duration, plan_held, backup_held,
+            )
+        else:
             held = db.place_hold(conn, job, est_duration)
             log.info("job %s: %.0fs of audio, %d credits held", job["id"], est_duration, held)
 
     # 3. Normalize to compact mono audio; its ffprobe duration is what we bill.
     audio = media.normalize(src, workdir)
     actual_duration = media.probe_file(audio)
+    _check_duration(actual_duration)
+    # If normalization crosses a whole-minute boundary, reserve only the
+    # incremental projected cost before contacting the provider.
+    db.reserve_provider_spend(conn, job, actual_duration)
 
     # 4. Transcribe (passing the user's language hint, if any).
-    db.set_status(conn, job["id"], "transcribing")
+    db.mark_provider_call_started(conn, job["id"], backend, model_name)
     provider = providers.get_provider(backend)
     result = provider.transcribe(audio, model_name, job, language=language_hint)
 
@@ -224,7 +278,26 @@ def sweep_expired_audio(conn: psycopg.Connection) -> int:
     rows = conn.execute(
         "SELECT id, audio_key FROM jobs WHERE audio_key IS NOT NULL AND audio_expires_at < now()"
     ).fetchall()
+    removed = 0
     for row in rows:
-        storage.delete_key(row["audio_key"])
-        conn.execute("UPDATE jobs SET audio_key = NULL WHERE id = %s", (row["id"],))
-    return len(rows)
+        if storage.delete_key(row["audio_key"]):
+            conn.execute("UPDATE jobs SET audio_key = NULL WHERE id = %s", (row["id"],))
+            removed += 1
+    return removed
+
+
+def sweep_expired_uploads(conn: psycopg.Connection) -> int:
+    """Delete abandoned upload intents and their objects after expiry."""
+    rows = conn.execute(
+        """
+        SELECT key FROM uploads
+        WHERE claimed_at IS NULL AND expires_at < now()
+        FOR UPDATE SKIP LOCKED
+        """
+    ).fetchall()
+    removed = 0
+    for row in rows:
+        if storage.delete_key(row["key"]):
+            conn.execute("DELETE FROM uploads WHERE key = %s", (row["key"],))
+            removed += 1
+    return removed

@@ -10,12 +10,13 @@ import {
   hashPassword,
   verifyPassword,
 } from "@/lib/auth";
-import { grantCredits } from "@/lib/credits";
+import { verifyEmailAndGrantSignupBonus } from "@/lib/credits";
 import { db } from "@/lib/db";
 import { appUrl, emailLayout, sendEmail } from "@/lib/email";
 import { clientIp, rateLimit, resetRateLimit } from "@/lib/ratelimit";
-import { getSettings } from "@/lib/settings";
+import { safeReturnPath } from "@/lib/return-path";
 import { sessions, users } from "@/lib/schema";
+import { getSettings } from "@/lib/settings";
 import { createAuthToken, consumeAuthToken } from "@/lib/tokens";
 
 export type AuthState = { error?: string; notice?: string };
@@ -28,12 +29,15 @@ const DUMMY_PASSWORD_HASH =
 
 const credentialsSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address."),
-  password: z.string().min(8, "Password must be at least 8 characters."),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters.")
+    .max(256, "Password must be 256 characters or fewer."),
 });
 
 const emailSchema = z.string().trim().toLowerCase().email();
 
-async function sendVerificationEmail(userId: string, email: string): Promise<void> {
+async function sendVerificationEmail(userId: string, email: string): Promise<boolean> {
   const token = await createAuthToken(userId, "verify", 24 * HOUR);
   const link = `${appUrl()}/verify-email?token=${token}`;
   try {
@@ -47,14 +51,16 @@ async function sendVerificationEmail(userId: string, email: string): Promise<voi
         { href: link, label: "Verify email" },
       ),
     });
+    return true;
   } catch (err) {
-    // Never block the user on a mail-provider hiccup — they can resend later.
+    // The account remains usable; the UI gives an honest recovery path.
     console.error("verification email failed:", err);
+    return false;
   }
 }
 
 export async function signup(_prev: AuthState, formData: FormData): Promise<AuthState> {
-  const limit = rateLimit(`signup:${await clientIp()}`, 10, HOUR);
+  const limit = await rateLimit(`signup:${await clientIp()}`, 10, HOUR);
   if (!limit.ok) {
     return { error: "Too many sign-ups from this network. Please try again later." };
   }
@@ -83,13 +89,13 @@ export async function signup(_prev: AuthState, formData: FormData): Promise<Auth
     throw err; // real DB failure — don't misreport it as a duplicate email
   }
 
-  const { signupBonusCredits } = await getSettings();
-  if (signupBonusCredits > 0) {
-    await grantCredits(userId, signupBonusCredits, "signup_bonus");
-  }
-  await sendVerificationEmail(userId, email);
+  const verificationSent = await sendVerificationEmail(userId, email);
   await createSession(userId);
-  redirect("/dashboard");
+  redirect(
+    verificationSent
+      ? safeReturnPath(formData.get("next"))
+      : "/dashboard?verificationEmail=failed",
+  );
 }
 
 export async function login(_prev: AuthState, formData: FormData): Promise<AuthState> {
@@ -97,9 +103,9 @@ export async function login(_prev: AuthState, formData: FormData): Promise<AuthS
   // Rate-limit by IP and, when present, by target email — throttles both broad
   // and targeted brute-force without locking a victim out globally.
   const ip = await clientIp();
-  const ipLimit = rateLimit(`login:ip:${ip}`, 20, 15 * 60 * 1000);
+  const ipLimit = await rateLimit(`login:ip:${ip}`, 20, 15 * 60 * 1000);
   const emailLimit = email.success
-    ? rateLimit(`login:email:${email.data}`, 8, 15 * 60 * 1000)
+    ? await rateLimit(`login:email:${email.data}`, 8, 15 * 60 * 1000)
     : { ok: true, retryAfterSec: 0 };
   if (!ipLimit.ok || !emailLimit.ok) {
     return { error: "Too many attempts. Please wait a few minutes and try again." };
@@ -126,10 +132,12 @@ export async function login(_prev: AuthState, formData: FormData): Promise<AuthS
   }
   // A correct login clears the throttles so a few earlier typos (or logging in
   // from several devices) never lock out a legitimate user.
-  resetRateLimit(`login:email:${parsed.data.email}`);
-  resetRateLimit(`login:ip:${ip}`);
+  await Promise.all([
+    resetRateLimit(`login:email:${parsed.data.email}`),
+    resetRateLimit(`login:ip:${ip}`),
+  ]);
   await createSession(user.id);
-  redirect("/dashboard");
+  redirect(safeReturnPath(formData.get("next")));
 }
 
 export async function logout(): Promise<void> {
@@ -148,9 +156,13 @@ export async function requestPasswordReset(
 ): Promise<AuthState> {
   const email = emailSchema.safeParse(formData.get("email"));
   const ip = await clientIp();
-  const limited =
-    !rateLimit(`reset:ip:${ip}`, 10, HOUR).ok ||
-    (email.success && !rateLimit(`reset:email:${email.data}`, 5, HOUR).ok);
+  const [ipResetLimit, emailResetLimit] = await Promise.all([
+    rateLimit(`reset:ip:${ip}`, 10, HOUR),
+    email.success
+      ? rateLimit(`reset:email:${email.data}`, 5, HOUR)
+      : Promise.resolve({ ok: true, retryAfterSec: 0 }),
+  ]);
+  const limited = !ipResetLimit.ok || !emailResetLimit.ok;
   if (limited) {
     return { error: "Too many requests. Please try again later." };
   }
@@ -182,7 +194,10 @@ export async function requestPasswordReset(
 
 const resetSchema = z.object({
   token: z.string().min(16),
-  password: z.string().min(8, "Password must be at least 8 characters."),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters.")
+    .max(256, "Password must be 256 characters or fewer."),
 });
 
 export async function resetPassword(_prev: AuthState, formData: FormData): Promise<AuthState> {
@@ -212,12 +227,36 @@ export async function resendVerification(
   _prev: AuthState,
   _formData: FormData,
 ): Promise<AuthState> {
+  void _prev;
+  void _formData;
   const user = await getCurrentUser();
   if (!user) return { error: "Please sign in first." };
   if (user.emailVerified) return { notice: "Your email is already verified." };
-  if (!rateLimit(`verify:${user.id}`, 5, HOUR).ok) {
+  if (!(await rateLimit(`verify:${user.id}`, 5, HOUR)).ok) {
     return { error: "Please wait a bit before requesting another email." };
   }
-  await sendVerificationEmail(user.id, user.email);
-  return { notice: "Verification email sent — check your inbox." };
+  const sent = await sendVerificationEmail(user.id, user.email);
+  return sent
+    ? { notice: "Verification email sent — check your inbox." }
+    : { error: "The verification email could not be sent. Try again later or contact support." };
+}
+
+/**
+ * Consume a verification token only after an explicit POST. Email security
+ * scanners commonly prefetch GET links; mutating during page render would let
+ * a scanner spend the one-time token before the account owner opens it.
+ */
+export async function confirmEmailVerification(formData: FormData): Promise<void> {
+  const token = formData.get("token");
+  if (typeof token !== "string" || token.length < 16) {
+    redirect("/verify-email?status=invalid");
+  }
+  const userId = await consumeAuthToken(token, "verify");
+  if (!userId) redirect("/verify-email?status=invalid");
+
+  const { signupBonusCredits } = await getSettings();
+  // A valid token is a success even if another valid link verified the same
+  // account moments earlier; the conditional grant still prevents duplicates.
+  await verifyEmailAndGrantSignupBonus(userId, signupBonusCredits);
+  redirect("/verify-email?status=verified");
 }

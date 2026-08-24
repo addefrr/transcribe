@@ -26,43 +26,27 @@ S3_ACCESS_KEY_ID = os.environ.get("S3_ACCESS_KEY_ID", "")
 S3_SECRET_ACCESS_KEY = os.environ.get("S3_SECRET_ACCESS_KEY", "")
 S3_FORCE_PATH_STYLE = os.environ.get("S3_FORCE_PATH_STYLE", "1") == "1"
 
-# Transcription routing (see worker/routing.py). The Standard tier is
-# language-routed: Qwen3-ASR for the languages it covers well (cheaper + more
-# accurate, especially English/Asian), and Whisper large-v3-turbo via Groq for
-# the long-tail languages Qwen doesn't support. The Premium tier is AssemblyAI.
+# Transcription routing (see worker/routing.py). Standard always uses Groq's
+# Whisper large-v3-turbo; Premium always uses Soniox's asynchronous v5 model.
 #
 # TRANSCRIBE_BACKEND, if set, forces every job onto one backend — handy for a
 # fully self-hosted setup ("local") or tests ("fake").
 TRANSCRIBE_BACKEND = os.environ.get("TRANSCRIBE_BACKEND", "")
 
-# ISO-639-1 codes Qwen3-ASR-Flash handles; a Standard job whose language hint is
-# anything else routes to the fallback backend instead.
-QWEN_LANGUAGES = frozenset(
-    os.environ.get("QWEN_LANGUAGES", "zh,en,ja,ko,ar,fr,de,es,it,pt,ru").split(",")
-)
-QWEN_MODEL = os.environ.get("QWEN_MODEL", "qwen3-asr-flash")
-STANDARD_FALLBACK_BACKEND = os.environ.get("STANDARD_FALLBACK_BACKEND", "groq")
-STANDARD_FALLBACK_MODEL = os.environ.get("STANDARD_FALLBACK_MODEL", "whisper-large-v3-turbo")
-PREMIUM_BACKEND = os.environ.get("PREMIUM_BACKEND", "assemblyai")
-PREMIUM_MODEL = os.environ.get("PREMIUM_MODEL", "best")
-
-# --- Qwen (DashScope, OpenAI-compatible) ---
-QWEN_API_KEY = os.environ.get("QWEN_API_KEY", "")
-QWEN_BASE_URL = os.environ.get(
-    "QWEN_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
-)
-# Qwen3-ASR-Flash caps each request at ~3 min / 10 MB, so longer audio is split
-# into chunks and stitched back together with offset timestamps.
-QWEN_CHUNK_SECONDS = int(os.environ.get("QWEN_CHUNK_SECONDS", "170"))
+STANDARD_BACKEND = "groq"
+STANDARD_MODEL = os.environ.get("STANDARD_MODEL", "whisper-large-v3-turbo")
+PREMIUM_BACKEND = "soniox"
+PREMIUM_MODEL = os.environ.get("PREMIUM_MODEL", "stt-async-v5")
 
 # --- Groq (OpenAI-compatible speech-to-text) ---
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_BASE_URL = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 
-# --- AssemblyAI ---
-ASSEMBLYAI_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY", "")
-ASSEMBLYAI_BASE_URL = os.environ.get("ASSEMBLYAI_BASE_URL", "https://api.assemblyai.com/v2")
-ASSEMBLYAI_TIMEOUT_SECONDS = int(os.environ.get("ASSEMBLYAI_TIMEOUT_SECONDS", "3600"))
+# --- Soniox asynchronous speech-to-text ---
+SONIOX_API_KEY = os.environ.get("SONIOX_API_KEY", "")
+SONIOX_BASE_URL = os.environ.get("SONIOX_BASE_URL", "https://api.soniox.com/v1")
+SONIOX_TIMEOUT_SECONDS = int(os.environ.get("SONIOX_TIMEOUT_SECONDS", "3600"))
+SONIOX_POLL_SECONDS = float(os.environ.get("SONIOX_POLL_SECONDS", "1"))
 
 # --- local faster-whisper backend (self-host on your own machine/GPU) ---
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "auto")
@@ -75,9 +59,15 @@ WHISPER_MODEL_PREMIUM = os.environ.get("WHISPER_MODEL_PREMIUM", "large-v3")
 AUDIO_RETENTION_DAYS = int(os.environ.get("AUDIO_RETENTION_DAYS", "7"))
 
 MAX_PLAYLIST_ITEMS = int(os.environ.get("MAX_PLAYLIST_ITEMS", "100"))
+MAX_ACTIVE_JOBS_PER_USER = max(
+    1, int(os.environ.get("MAX_ACTIVE_JOBS_PER_USER", "3"))
+)
 
 MAX_DURATION_SECONDS = int(os.environ.get("MAX_DURATION_SECONDS", str(4 * 3600)))
 MAX_FILESIZE_BYTES = int(os.environ.get("MAX_FILESIZE_BYTES", str(2 * 1024**3)))
+# Upper bound for a single ffmpeg normalization/segmentation operation. This
+# prevents malformed media from occupying a worker indefinitely.
+MEDIA_COMMAND_TIMEOUT_SECONDS = int(os.environ.get("MEDIA_COMMAND_TIMEOUT_SECONDS", "1800"))
 POLL_INTERVAL_SECONDS = float(os.environ.get("POLL_INTERVAL_SECONDS", "2"))
 STALE_JOB_MINUTES = int(os.environ.get("STALE_JOB_MINUTES", "30"))
 SSRF_ALLOW_PRIVATE = os.environ.get("SSRF_ALLOW_PRIVATE", "0") == "1"

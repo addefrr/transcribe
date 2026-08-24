@@ -1,7 +1,7 @@
 [project]
 name = "transcribe-worker"
 version = "0.1.0"
-description = "Background worker: downloads media, normalizes audio, transcribes via Groq/AssemblyAI (or local faster-whisper), settles credits."
+description = "Background worker: downloads media, normalizes audio, transcribes via Groq/Soniox (or local faster-whisper), settles credits."
 requires-python = ">=3.11"
 dependencies = [
     "psycopg[binary]>=3.1",

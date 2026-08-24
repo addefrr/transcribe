@@ -18,6 +18,7 @@ data/
 pgdata/
 *.log
 .run/
+.wrangler/
 
 # editor
 .DS_Store

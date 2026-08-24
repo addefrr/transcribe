@@ -21,7 +21,7 @@ def _get_model(name: str):
 
 
 def _model_for_tier(tier: str) -> str:
-    # The tier→model map holds API model ids (Groq/AssemblyAI); when running the
+    # The tier→model map holds API model ids (Groq/Soniox); when running the
     # local backend instead, resolve to a faster-whisper size from our own env.
     return config.WHISPER_MODEL_PREMIUM if tier == "premium" else config.WHISPER_MODEL_STANDARD
 

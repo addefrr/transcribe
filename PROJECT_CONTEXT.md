@@ -34,7 +34,7 @@ Browser ─► web/ (Next.js: auth, credits, Stripe, job API, admin) ─► Post
                                                                    worker/ (Python)
                                      yt-dlp ▸ ffmpeg ▸ ASR provider ▸ settle credits
                                                                           │
-                                        Qwen / Groq / AssemblyAI / local  ◄┘
+                                             Groq / Soniox / local  ◄┘
 ```
 
 There is **no separate queue or job runner** — the `jobs` table *is* the queue
@@ -57,8 +57,8 @@ web/                     Next.js app
                          subscriptions, wallet, storage, ssrf, languages, tokens, ...
   drizzle/               hand-written SQL migrations + meta/_journal.json
 worker/worker/           main.py (poll loop), pipeline.py, db.py, media.py, storage.py,
-                         routing.py, ssrf.py, config.py, providers/ (qwen, groq,
-                         assemblyai, local, fake)
+                         routing.py, ssrf.py, config.py, providers/ (groq,
+                         soniox, local, fake)
 extension/               MV3 browser extension (transcribe tab audio) — see extension/README.md
 Makefile                 make dev / update / migrate / stop / logs ...
 docker-compose.yml       Postgres (+ optional MinIO) for local dev
@@ -76,7 +76,8 @@ matching entry appended to `web/drizzle/meta/_journal.json`; apply with
 ## 3. Data model (`web/src/lib/schema.ts`)
 
 - **users** — `id, email (unique), passwordHash (argon2id), emailVerified,
-  creditBalance, createdAt`.
+  creditBalance, createdAt`. The configured signup-credit bonus is granted only
+  on the first successful email verification.
 - **sessions** — `id = sha256(cookie token)`, `userId, expiresAt`. Cookie-based
   auth; the DB only stores the hash.
 - **auth_tokens** — one-time email verify / password-reset tokens (sha256 stored,
@@ -95,19 +96,25 @@ matching entry appended to `web/drizzle/meta/_journal.json`; apply with
   `subscriptionId`, `batchId` (playlist child), `folderId`, `diarize`,
   `costPerMinuteCents`/`estCostCents` (our estimated cost), `languageHint`,
   `status (pending→probing→downloading→transcribing→completed|failed)`,
-  `durationSeconds`, `creditsHeld`/`creditsCharged`, `language`, `error`,
+  `durationSeconds`, `creditsHeld`/`creditsCharged`,
+  `subscriptionMinutesHeld`/`subscriptionMinutesCharged`, `language`, `error`,
   `audioKey`/`audioExpiresAt` (retained playback audio), `shareId` (public link),
-  `claimedAt`. Indexes drive the queue poll and the reuse lookup.
-- **transcripts** — `jobId (pk)`, `text`, `segments jsonb` (`{start,end,text,
-  speaker?}[]`).
+  `requiresConfirmation`/`confirmedAt`, `provider`/`model`/`resultSource`,
+  `claimedAt`. Indexes drive the queue poll and the account-scoped reuse lookup.
+- **transcripts / transcript_revisions** — current text and timestamped segments,
+  plus reversible snapshots written before customer edits.
+- **uploads** — expiring, single-use upload intents bound to account, object key,
+  declared byte size, filename, and content type.
+- **rate_limits** — hashed shared abuse-control buckets used across web instances.
 - **folders** — user folders with a `color` tag; `jobs.folderId` is `ON DELETE
   SET NULL` (deleting a folder un-files, never deletes transcripts).
 - **settings** — `key (pk) → value jsonb`. Admin-editable config; overlaid on
   code defaults (see §6).
 - **subscriptions** — one active row per user. `planId, tier, interval
-  (month|year|week), status, allowanceMinutes, minutesUsed, periodStart/End,
-  stripeSubscriptionId`. Fair-use is metered by `minutesUsed` vs
-  `allowanceMinutes` per period.
+  (month|year|week), status, allowanceMinutes, minutesUsed,
+  allowancePeriodStart/End, periodStart/End, stripeSubscriptionId`. Fair-use is
+  metered by `minutesUsed` vs `allowanceMinutes`. Annual plans are billed yearly
+  but reset the same monthly allowance as their matching monthly plan.
 - **job_batches** — a playlist submission: worker expands it (yt-dlp flat) into
   `items jsonb`, user confirms the total price, then one job per item is created
   under `batchId`.
@@ -125,20 +132,27 @@ expired audio, claim a playlist batch to expand, else claim a job. `pipeline.py`
    `media.probe_file` (ffprobe; falls back to **decoding** the audio when the
    container has no duration, e.g. browser MediaRecorder WebM). Title is saved as
    `output_name`; the video id as `source_video_id`.
-2. **Hold credits** for the probed duration (`db.place_hold`) — unless billed to
-   a subscription.
-3. **Transcript reuse.** If `settings.reuseTranscripts` is on and the same
-   `source_video_id` was already transcribed at the same tier/diarize/language,
+2. **Confirm URL work.** A new URL job stops at `awaiting_confirmation`
+   after the worker-side probe. The customer sees duration, plan minutes, and
+   backup credits before explicitly starting paid speech recognition.
+3. **Reserve usage.** Credits and/or subscription minutes are reserved
+   transactionally. A clip that crosses the allowance boundary uses the
+   remaining plan minutes plus backup credits; concurrent jobs cannot spend the
+   same allowance.
+4. **Transcript reuse.** If `settings.reuseTranscripts` is on and the same
+   account already transcribed the same `source_video_id` at the same tier/diarize/language,
    copy that transcript (and its audio) and complete — charging normally
    (`complete_job` bills identically). Skips download/normalize/transcribe.
-4. **Download** (`media.download_url`, size-capped) if not an upload.
-5. **Normalize** to mono Opus (`media.normalize`); its ffprobe duration is what
+5. **Download** (`media.download_url`, size-capped) if not an upload.
+   Upload objects are checked against their server-recorded exact size again at
+   the worker boundary.
+6. **Normalize** to mono Opus (`media.normalize`); its ffprobe duration is what
    we bill.
-6. **Transcribe** via the routed provider.
-7. **Settle**: `complete_job` (charge `min(credits_for(duration), held)`, refund
-   the rest) or `complete_job_subscription` (draw `minutesUsed`). Store the
+7. **Transcribe** via the routed provider and snapshot provider/model provenance.
+8. **Settle**: charge actual started minutes against the reservation, release
+   any remainder, and store the
    transcript.
-8. **Retain audio** (`storage.persist` → `audio/<jobId>.ogg`, TTL) for playback.
+9. **Retain audio** (`storage.persist` → `audio/<jobId>.ogg`, TTL) for playback.
 
 Failures call `db.fail_job` (release the hold) and delete the source upload.
 A `_Heartbeat` thread refreshes `claimed_at` so long jobs aren't requeued.
@@ -154,15 +168,23 @@ A `_Heartbeat` thread refreshes `claimed_at` so long jobs aren't requeued.
 - **Purchases.** Stripe Checkout for packs (`/api/stripe/checkout`) and a
   custom amount; a webhook (`/api/stripe/webhook`, idempotent on
   `stripeEventId`) grants credits. `DEV_FAKE_CHECKOUT=1` credits instantly in dev.
-- **Subscriptions.** Plans (monthly / annual / one-time week pass, per tier).
-  **Fair-use allowance** (`planAllowanceMinutes`, settings.ts) =
-  `priceUsdCents × capPct% ÷ costPerMinuteCents[tier]` — i.e. *(plan price ÷ OUR
-  compute cost per minute) × cap%*. `costPerMinuteCents` is OUR cost. The admin
-  edits this cost as **$/hour** in the portal (converted to ¢/min on save).
-- **Spend wallet** (`web/src/lib/wallet.ts`). Platform revenue = purchases +
-  subscription payments; spend = `sum(jobs.est_cost_cents)`. New jobs are gated
-  once spend ≥ `revenue × walletSpendPct%`. Only trips when revenue > 0 (free
-  signup-bonus usage is never blocked).
+- **Subscriptions.** Plans have explicit, admin-editable minute allowances;
+  entitlements never change as a side effect of a cost estimate. Monthly and
+  annual plans for a tier receive the same monthly allowance. One-time week
+  passes have a seven-day allowance. Usage is reserved before provider spend,
+  with any overage drawn from backup credits.
+- **Spend wallet** (`web/src/lib/wallet.ts`). Recorded payment value = credit
+  purchases + subscription payments; new Stripe entries are tax-exclusive when
+  event data permits, while historical/fallback rows can include tax. Spend =
+  `sum(jobs.est_cost_cents)`. Projected provider cost is reserved under a shared
+  PostgreSQL advisory lock before any remote ASR call, so concurrent web and
+  worker processes cannot each spend the same remaining budget. A pre-provider
+  failure releases the reservation; after `provider_started_at` it is retained
+  conservatively and the request is not replayed automatically. This is an
+  operational guardrail, not profit or an accounting balance, and it only trips
+  once payment value is positive. Deletion first rolls financial/usage amounts
+  into unlinkable additive `platform_metrics`, so removing customer-linked rows
+  does not silently rewrite lifetime economics.
 
 ---
 
@@ -170,10 +192,12 @@ A `_Heartbeat` thread refreshes `claimed_at` so long jobs aren't requeued.
 
 - **`web/src/lib/settings.ts`** — `DEFAULT_SETTINGS` holds code defaults;
   `getSettings()` overlays per-key rows from the `settings` table (5s cache);
-  `setSetting(key, value)` upserts + invalidates. Tunables: tiers
+  the developer form writes its complete settings/copy snapshot atomically.
+  Tunables: tiers
   (label/creditsPerMinute/description), packs, signup bonus, price-per-credit,
-  min purchase, per-tier compute cost, subscription plans (price/cap),
-  `walletSpendPct`, `reuseTranscripts`.
+  min purchase, per-tier compute cost, subscription plans (price/explicit allowance),
+  `developerSubscriptionBypass` (admin demo mode), `walletSpendPct`,
+  `reuseTranscripts`.
 - **`web/src/lib/content.ts`** — client-safe **content dictionary**: every
   user-facing string as namespaced defaults (`nav`, `landing`, `dashboard`,
   `newJob`, `auth`, `plans`, `credits`, `jobDetail`, ...). `{placeholder}`
@@ -190,11 +214,9 @@ A `_Heartbeat` thread refreshes `claimed_at` so long jobs aren't requeued.
 
 `worker/worker/routing.py` maps `(tier, languageHint)` → `(backend, model)`:
 
-- **Standard** is language-routed: **Qwen3-ASR** (DashScope) for the languages it
-  covers well (cheaper/more accurate, esp. English + Asian), **Groq
-  whisper-large-v3-turbo** for the long tail.
-- **Premium**: **AssemblyAI** (best long-form accuracy; the only backend that
-  diarizes → segment `speaker`).
+- **Standard**: **Groq Whisper Large V3 Turbo** for every supported language.
+- **Premium**: **Soniox `stt-async-v5`**, with optional speaker diarization that
+  produces segment `speaker` labels.
 - `local` (self-hosted faster-whisper) and `fake` (deterministic, for tests)
   exist. `TRANSCRIBE_BACKEND=<name>` forces one backend for everything.
 
@@ -221,10 +243,11 @@ end,text,speaker?}]}`.
 - Password hashing: argon2id (`@node-rs/argon2`, OWASP params).
 - Sessions: random token in an httpOnly cookie; DB stores only its sha256.
 - Email verification + password reset via one-time hashed tokens
-  (`web/src/lib/tokens.ts`) and Resend (`web/src/lib/email.ts`; logs to console
-  when `RESEND_API_KEY` is unset).
-- In-memory rate limiting (`web/src/lib/ratelimit.ts`) on signup/login/reset/
-  probe; a correct login clears its buckets.
+  (`web/src/lib/tokens.ts`) and Resend (`web/src/lib/email.ts`). Missing
+  email configuration logs links only in development and fails closed in production.
+- PostgreSQL-backed, hashed-key rate limiting (`web/src/lib/ratelimit.ts`) on
+  signup/login/reset/verification and playlist submission; a correct login
+  clears its buckets.
 - API access for the extension: `Authorization: Bearer <api_token>` resolved by
   `getRequestUser(req)` (bearer OR session cookie); CORS-open on the token-auth
   job/upload routes (safe because they use bearer, not cookies).
@@ -236,9 +259,9 @@ end,text,speaker?}]}`.
 - `.env.example` documents every var. Key ones: `DATABASE_URL`, `STORAGE_DRIVER`
   (+ `UPLOAD_DIR` or `S3_*`), `APP_URL`, `STRIPE_*`/`DEV_FAKE_CHECKOUT`,
   `RESEND_API_KEY`/`EMAIL_FROM`, `ADMIN_EMAILS` (who sees `/developer`),
-  `QWEN_*`/`GROQ_API_KEY`/`ASSEMBLYAI_API_KEY`, `TRANSCRIBE_BACKEND`,
-  `YTDLP_BIN` (used by the web `/api/probe` for instant URL pricing; degrades
-  gracefully if missing), `SSRF_ALLOW_PRIVATE`.
+  `GROQ_API_KEY`/`SONIOX_API_KEY`, `TRANSCRIBE_BACKEND`,
+  `AUDIO_RETENTION_DAYS`, and `SSRF_ALLOW_PRIVATE`. The public web
+  process never runs yt-dlp; URL inspection happens in the isolated worker.
 - **Run:** `make setup` then `make dev` (starts Postgres, web on :3000, worker).
   `make migrate`, `make stop`, `make logs`, `make status`. Or `docker-compose up`
   for Postgres and run web/worker directly.
@@ -264,9 +287,9 @@ end,text,speaker?}]}`.
 
 ## 12. Known constraints / gotchas
 
-- **Instant URL pricing** (`/api/probe`) shells out to `yt-dlp` (or `YTDLP_BIN`).
-  If it's not on the web host's PATH, cost falls back to "calculated after
-  fetch" — no hard failure. The worker uses the yt-dlp Python lib directly.
+- **URL pricing confirmation** is asynchronous: the worker inspects the source,
+  then the job page asks the customer to approve duration and the exact
+  allowance/backup-credit split before transcription begins.
 - **Browser-recorded WebM has no container duration** (live stream); the worker
   probes by decoding as a fallback. Keep that fallback.
 - **`UPLOAD_DIR` must resolve identically for web and worker** — it's anchored to
