@@ -1,10 +1,15 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup update migrate db-up db-down dev dev-web dev-worker \
+.PHONY: help setup update migrate db-up db-down dev dev-check dev-web dev-worker \
         restart stop status logs logs-web logs-worker build clean fresh \
         providers connect env-check production-check cf-login cf-r2-create
 
+# Startup is intentionally ordered: configuration/dependencies, healthy DB,
+# migrations, then processes. This also keeps `make -j dev` from racing them.
+.NOTPARALLEL: dev setup restart
+
 RUN_DIR   := .run
 ENV_FILE  := web/.env
+WEB_PORT  ?= 3000
 
 # --- help ----------------------------------------------------------------------
 
@@ -131,26 +136,57 @@ cf-r2-create: ## Create an R2 bucket: make cf-r2-create R2_BUCKET=transcribe
 
 db-up: ## Start Postgres (docker compose)
 	docker compose up -d postgres
+	@echo "==> Waiting for Postgres"
+	@attempt=0; \
+	until docker compose exec -T postgres pg_isready -U postgres -d transcribe >/dev/null 2>&1; do \
+		attempt=$$((attempt + 1)); \
+		if [ "$$attempt" -ge 30 ]; then \
+			echo "Postgres did not become ready within 30 seconds."; \
+			docker compose logs --tail=30 postgres; \
+			exit 1; \
+		fi; \
+		sleep 1; \
+	done
+	@echo "Postgres is ready"
 
 db-down: ## Stop Postgres
 	docker compose stop postgres
 
 # --- running it locally ------------------------------------------------------------
 
-dev: db-up dev-web dev-worker ## Start the database, web app and worker (background)
+dev: dev-check db-up migrate dev-web dev-worker ## Start database, migrate, then run web and worker
 	@echo ""
-	@echo "  web:    http://localhost:3000"
+	@echo "  web:    http://localhost:$(WEB_PORT)"
 	@echo "  logs:   make logs"
 	@echo "  stop:   make stop"
+
+dev-check: ## Check local dependencies before starting development services
+	@test -f $(ENV_FILE) || { echo "Missing $(ENV_FILE). Run 'make setup' first."; exit 2; }
+	@test -d web/node_modules || { echo "Missing web dependencies. Run 'make setup' first."; exit 2; }
+	@test -x worker/.venv/bin/python || { echo "Missing worker virtualenv. Run 'make setup' first."; exit 2; }
 
 dev-web: ## Start just the web dev server in the background
 	@mkdir -p $(RUN_DIR)
 	@if [ -f $(RUN_DIR)/web.pid ] && kill -0 $$(cat $(RUN_DIR)/web.pid) 2>/dev/null; then \
 		echo "web already running (pid $$(cat $(RUN_DIR)/web.pid))"; \
 	else \
-		cd web && (setsid nohup npm run dev >../$(RUN_DIR)/web.log 2>&1 </dev/null & echo $$! >../$(RUN_DIR)/web.pid); \
-		echo "web started — logs: make logs-web"; \
+		cd web && (setsid nohup npm run dev -- --port $(WEB_PORT) >../$(RUN_DIR)/web.log 2>&1 </dev/null & echo $$! >../$(RUN_DIR)/web.pid); \
 	fi
+	@pid=$$(cat $(RUN_DIR)/web.pid); \
+	for attempt in 1 2 3 4 5; do \
+		if grep -q "Ready in" $(RUN_DIR)/web.log 2>/dev/null; then \
+			echo "web ready on http://localhost:$(WEB_PORT) — logs: make logs-web"; \
+			exit 0; \
+		fi; \
+		if ! kill -0 $$pid 2>/dev/null; then \
+			echo "Web server failed to start:"; \
+			tail -30 $(RUN_DIR)/web.log; \
+			rm -f $(RUN_DIR)/web.pid; \
+			exit 1; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo "web is still starting — inspect it with 'make logs-web'"
 
 dev-worker: ## Start just the transcription worker in the background
 	@mkdir -p $(RUN_DIR)
@@ -159,8 +195,22 @@ dev-worker: ## Start just the transcription worker in the background
 	else \
 		set -a && . ./$(ENV_FILE) && set +a && \
 		cd worker && (setsid nohup .venv/bin/python -m worker.main >../$(RUN_DIR)/worker.log 2>&1 </dev/null & echo $$! >../$(RUN_DIR)/worker.pid); \
-		echo "worker started — logs: make logs-worker"; \
 	fi
+	@pid=$$(cat $(RUN_DIR)/worker.pid); \
+	for attempt in 1 2 3 4 5; do \
+		if grep -q "worker starting" $(RUN_DIR)/worker.log 2>/dev/null; then \
+			echo "worker ready — logs: make logs-worker"; \
+			exit 0; \
+		fi; \
+		if ! kill -0 $$pid 2>/dev/null; then \
+			echo "Worker failed to start:"; \
+			tail -30 $(RUN_DIR)/worker.log; \
+			rm -f $(RUN_DIR)/worker.pid; \
+			exit 1; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo "worker is still starting — inspect it with 'make logs-worker'"
 
 restart: stop dev ## Restart the web app and worker
 

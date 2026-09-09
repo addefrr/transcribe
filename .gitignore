@@ -24,3 +24,6 @@ pgdata/
 .DS_Store
 .idea/
 .vscode/
+
+# Private project notes (match any capitalization)
+[Pp][Rr][Oo][Jj][Ee][Cc][Tt]_[Cc][Oo][Nn][Tt][Ee][Xx][Tt].[Mm][Dd]
