@@ -8,8 +8,7 @@ Users can upload a file, submit a media URL or playlist, record their microphone
 or capture tab audio through the browser extension, then review and export the
 result as TXT, SRT, or VTT.
 
-Built by [addefrr](https://github.com/addefrr). This repository is published as a
-portfolio showcase of the application's product features and engineering.
+Built by [addefrr](https://github.com/addefrr).
 The source is proprietary; see [License](#license) for usage restrictions.
 
 ## Features
@@ -180,8 +179,7 @@ cd worker
 
 **Copyright (c) 2026 addefrr. All rights reserved.**
 
-This is proprietary software, published for portfolio presentation. No
-permission is granted to use, run, copy, modify, distribute, sublicense, sell,
+No permission is granted to use, run, copy, modify, distribute, sublicense, sell,
 deploy, or create derivative works from the project, for either commercial or
 noncommercial purposes. Rights required by applicable law or GitHub's terms for
 viewing and forking a public repository are unaffected. Third-party dependencies
